@@ -67,8 +67,9 @@ following the same pattern as the existing Flowlite deploy on that droplet:
    `DROPLET_USER`, `DROPLET_SSH_KEY`.
 3. On the droplet: `git fetch origin main` + `git reset --hard origin/main` to erase local
    drift.
-4. `./start.sh` → build + `docker compose up -d` with the production compose file and its
-   `.env.prod`; migrations run on startup.
+4. `./start.sh` → build + `docker compose up -d` with the single self-managed
+   `docker-compose.yml` (app + Postgres, both on the droplet) and a `.env` on the droplet;
+   migrations run on startup.
 5. Smoke-test the health endpoints through the Caddy gateway (TLS), retrying up to 5 minutes.
    If unhealthy, mark the deploy red and print `docker compose ps` plus the last logs.
 

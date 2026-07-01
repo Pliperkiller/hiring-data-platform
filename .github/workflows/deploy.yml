@@ -38,7 +38,7 @@ jobs:
             set -euo pipefail
             cd hiring-data-platform
             deadline=$((SECONDS + 300))
-            until curl -fsS https://${{ secrets.DROPLET_HOST }}/health; do
+            until curl -fsS http://localhost:8000/health; do
               if [ "$SECONDS" -ge "$deadline" ]; then
                 echo "Health check did not pass within 5 minutes"
                 docker compose ps

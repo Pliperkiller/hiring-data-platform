@@ -1,0 +1,49 @@
+name: deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-droplet
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to droplet
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd hiring-data-platform
+            git fetch origin main
+            git reset --hard origin/main
+            ./start.sh
+
+      - name: Smoke-test health endpoint
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd hiring-data-platform
+            deadline=$((SECONDS + 300))
+            until curl -fsS https://${{ secrets.DROPLET_HOST }}/health; do
+              if [ "$SECONDS" -ge "$deadline" ]; then
+                echo "Health check did not pass within 5 minutes"
+                docker compose ps
+                docker compose logs --tail=200
+                exit 1
+              fi
+              sleep 5
+            done

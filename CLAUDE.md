@@ -20,8 +20,8 @@ Docker Compose · pytest · GitHub Actions.
 - `app/domain/` — pure domain: entities, value objects, domain services, repository
   interfaces. No framework or DB imports here.
 - `app/application/` — use cases orchestrating domain + repositories.
-- `app/infrastructure/` — SQLAlchemy models, repository implementations, Alembic
-  migrations, AVRO, config.
+- `app/infrastructure/` — SQLAlchemy models, `db/session.py` (engine/session construction),
+  repository implementations, Alembic migrations, AVRO, config.
 - `app/interface/` — FastAPI routers/schemas/error handlers, and the Streamlit UI.
 - `tests/` — `unit/` (domain + application, no DB) and `integration/` (repositories, API via
   TestClient, AVRO round-trip).
@@ -58,7 +58,9 @@ Full layout and diagrams in `docs/DESIGN.md`.
 - Run locally: `docker compose up -d --build`
 - Tests + coverage gate: `pytest --cov=app --cov-fail-under=90`
 - Lint / types: `ruff check .` · `mypy app`
-- Migrations: `alembic upgrade head` · `alembic revision --autogenerate -m "message"`
+- Migrations: `alembic upgrade head` · `alembic revision --autogenerate -m "message"`.
+  `docker-entrypoint.sh` runs `alembic upgrade head` automatically before the app starts, in
+  every environment (local Docker, CI, droplet).
 - Deploy: merge to `main` (GitHub Actions runs the droplet deploy)
 
 ## Ubiquitous language (use these exact terms in code)

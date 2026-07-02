@@ -123,6 +123,12 @@ CREATE TABLE rejected_records (
 
 > Use SQLAlchemy identity columns for the `GENERATED ALWAYS AS IDENTITY` primary keys in the migrations.
 
+**Exactly three identity primary keys:** `employee_versions.version_id`, `loads.id`, and
+`rejected_records.id`. The other three PKs (`departments.id`, `jobs.id`,
+`employees.employee_id`) are plain `INTEGER` business keys supplied by the caller — no
+identity/autoincrement, per the "no surrogate for the business key" decision in
+`DECISIONS.md`.
+
 ## SCD Type 2 logic
 
 Applied when ingesting a **validated** `hired_employees` row:

@@ -98,3 +98,21 @@ summing to 1643 (total valid 2021 hires); report 2 yields 7 departments above th
   also gives idempotency for free at the fact level (re-inserting the same id hits the PK).
 - **Load order.** Reference tables (`departments`, `jobs`) load before `hired_employees`,
   because employee FKs reference them.
+
+## Schema and persistence (Phase 1)
+
+- **Migrations run via the container entrypoint, not a FastAPI startup hook.**
+  `docker-entrypoint.sh` runs `alembic upgrade head` before `exec`-ing uvicorn. An in-app
+  startup hook would run once per worker process, racing (Alembic's own version-locking
+  makes this safe, but wasteful and noisy) — the entrypoint runs it exactly once per
+  container start, before the app accepts traffic.
+- **Repositories `flush()`, never `commit()`.** The caller (a test fixture today, a use case
+  in later phases) owns the transaction boundary, so a batch-ingestion use case can commit or
+  roll back the whole operation atomically once repositories exist.
+- **`Load` is co-located with `RejectedRecord`** in `app/domain/rejected_record.py` rather
+  than a separate `load.py`. `DESIGN.md`'s folder layout does not reserve a slot for it, and
+  the two are relationally coupled (`rejected_records.load_id -> loads.id`), both populated
+  during ingestion/rejection.
+- **`app/infrastructure/db/session.py` is a small, deliberate addition** to `DESIGN.md`'s
+  folder layout: something has to own `Engine`/`sessionmaker` construction so Alembic's
+  `env.py`, repositories, and tests can all get a `Session` from the same place.

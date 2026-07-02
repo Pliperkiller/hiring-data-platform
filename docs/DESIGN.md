@@ -82,9 +82,9 @@ Folder layout:
 ```
 app/
   domain/            # pure core, no framework dependencies
-    employee.py         # Employee aggregate + SCD versioning logic
+    employee.py         # Employee aggregate (hire facts) + EmployeeVersion (SCD2)
     reference.py        # Department, Job
-    rejected_record.py
+    rejected_record.py  # RejectedRecord, Load
     value_objects.py    # HireDatetime, ReasonCode, ...
     validation.py       # validation domain service
     repositories.py     # repository interfaces (ABCs)
@@ -97,6 +97,7 @@ app/
   infrastructure/
     db/
       models.py         # SQLAlchemy models
+      session.py        # engine / sessionmaker construction (Alembic, repos, tests)
       migrations/       # Alembic
       repositories.py   # concrete implementations
     avro/               # backup / restore in AVRO
@@ -110,9 +111,15 @@ app/
     ui/
       streamlit_app.py  # historical load + dashboards
 tests/
+  conftest.py           # DB fixtures: migrated test DB, per-test transaction rollback
   unit/                 # domain and application (no DB)
   integration/          # repos, API (TestClient), AVRO round-trip
+docker-entrypoint.sh  # runs `alembic upgrade head` before starting uvicorn
 ```
+
+Migrations run on container startup via `docker-entrypoint.sh` (not a FastAPI startup hook),
+so they execute once per deploy before the app accepts traffic, regardless of uvicorn worker
+count.
 
 ## Ingestion flow
 

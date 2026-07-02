@@ -52,8 +52,8 @@ python -m app.application.restore <table>    # replaces <table> from data/<table
 Implementation lives in `app/infrastructure/avro/` (schemas + `codec.py`'s `write_avro`/
 `read_avro`) and `app/application/backup.py` / `restore.py`. Both are also reachable over
 HTTP as `POST /admin/backup/{table}` / `POST /admin/restore/{table}` (see `API_CONTRACT.md`
-and `DECISIONS.md`), used by the Streamlit "Backup & Restore" tab — the CLI and the HTTP
-routes call the exact same `Backup`/`Restore` use cases, so behavior is identical either way.
+and `DECISIONS.md`), used by the Streamlit "Admin" tab — the CLI and the HTTP routes call the
+exact same `Backup`/`Restore` use cases, so behavior is identical either way.
 
 ## Notes on precision and identity columns
 
@@ -77,6 +77,5 @@ routes call the exact same `Backup`/`Restore` use cases, so behavior is identica
   empties `employees` and `employee_versions` too); restoring the full six-table set means
   running the CLI (or the admin endpoints) once per table in the order below so every emptied
   dependent gets its own data back immediately after.
-- `data/` backups live inside the app container's filesystem and are not bind-mounted to the
-  host in `docker-compose.yml` — they do not survive container recreation unless an operator
-  adds a volume mount. Out of scope for this phase.
+- `data/` is bind-mounted from the host (`./data:/code/data` in `docker-compose.yml`, added in
+  Phase 7), so backups survive a container recreate, not just a container restart.

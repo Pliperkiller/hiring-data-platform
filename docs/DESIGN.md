@@ -63,7 +63,7 @@ flowchart TD
         ROUTERS["FastAPI routers + schemas<br/>+ error handlers · Streamlit"]
     end
     subgraph application["Application (use cases)"]
-        UC["IngestBatch · LoadHistorical<br/>GenerateReport · Backup · Restore"]
+        UC["IngestBatch · GenerateReport<br/>Backup · Restore · Reset"]
     end
     subgraph domain["Domain"]
         AGG["Employee aggregate (+ SCD versions)<br/>Value objects: HireDatetime, ReasonCode<br/>Services: Validation, Versioning<br/>Repository interfaces"]
@@ -84,7 +84,7 @@ app/
   domain/            # pure core, no framework dependencies
     employee.py         # Employee aggregate (hire facts) + EmployeeVersion (SCD2)
     reference.py        # Department, Job
-    rejected_record.py  # RejectedRecord, Load
+    rejected_record.py  # RejectedRecord, Load, LoadStats
     value_objects.py    # HireDatetime, ReasonCode, ...
     validation.py       # validation domain service
     repositories.py     # repository interfaces (ABCs)
@@ -93,6 +93,7 @@ app/
     generate_report.py
     backup.py
     restore.py
+    reset.py            # truncates all six tables + refreshes report views
   infrastructure/
     db/
       models.py         # SQLAlchemy models
@@ -101,16 +102,18 @@ app/
       repositories.py   # concrete implementations
     avro/               # backup / restore in AVRO
     config.py
+    logging_config.py   # one-shot root logger config, called once at API startup
   interface/
     ingest_constants.py  # MAX_BATCH_SIZE shared by api/schemas.py and ui/historical_load.py
     api/
       main.py           # FastAPI app
-      routers/          # ingest.py, reports.py
+      routers/          # ingest.py, reports.py, admin.py
       schemas.py        # request / response (Pydantic)
       errors.py         # exception handlers
     ui/
-      streamlit_app.py    # historical load UI (rendering only)
+      streamlit_app.py    # historical load + Admin tab UI (rendering only)
       historical_load.py  # pure orchestration: chunk, POST in order, aggregate
+      backup_restore.py   # pure admin-tab orchestration: endpoints, auth, confirmations
 tests/
   conftest.py           # DB fixtures: migrated test DB, per-test transaction rollback
   unit/                 # domain and application (no DB)

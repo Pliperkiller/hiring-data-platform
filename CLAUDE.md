@@ -38,7 +38,9 @@ Full layout and diagrams in `docs/DESIGN.md`.
   year filter inflates results. This exact omission was a real bug in a prior version.
 - **Restore = full replace** (truncate + insert, reference tables first), never a merge.
 - **SCD Type 2:** an employee attribute change creates a new version; hires are counted once
-  and attributed to the hire-time department/job, not the current one.
+  and attributed to the hire-time department/job, not the current one. `employees` carries
+  both: immutable hire facts (`hire_department_id`/`hire_job_id`, used by reports) and current
+  state (`department_id`/`job_id`, kept in sync with `employee_versions` on every change).
 - **Do not over-engineer.** Ingestion is synchronous batch (1–1000 rows per request). No
   queues, no streaming, no background job system.
 
@@ -65,9 +67,9 @@ Full layout and diagrams in `docs/DESIGN.md`.
 
 ## Ubiquitous language (use these exact terms in code)
 
-**employee**, **version** (an SCD row), **hire**, **hire-time department/job**, **reference
-table** (department, job), **rejected record**, **reason code**, **load** (one ingestion
-run), **batch** (the rows in one request).
+**employee**, **version** (an SCD row), **hire**, **hire-time department/job**, **current
+department/job**, **reference table** (department, job), **rejected record**, **reason
+code**, **load** (one ingestion run), **batch** (the rows in one request).
 
 ## Documents
 

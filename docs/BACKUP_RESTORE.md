@@ -49,6 +49,34 @@ python -m app.application.backup <table>     # writes data/<table>.avro
 python -m app.application.restore <table>    # replaces <table> from data/<table>.avro
 ```
 
-A reference implementation of the AVRO write/read and the DB round-trip exists in the
-standalone AVRO lab produced earlier; adapt it to the real tables and the admin-command
-entry points.
+Implementation lives in `app/infrastructure/avro/` (schemas + `codec.py`'s `write_avro`/
+`read_avro`) and `app/application/backup.py` / `restore.py`. Both are also reachable over
+HTTP as `POST /admin/backup/{table}` / `POST /admin/restore/{table}` (see `API_CONTRACT.md`
+and `DECISIONS.md`), used by the Streamlit "Backup & Restore" tab — the CLI and the HTTP
+routes call the exact same `Backup`/`Restore` use cases, so behavior is identical either way.
+
+## Notes on precision and identity columns
+
+- `timestamp-millis` truncates to millisecond precision. Postgres `TIMESTAMP(timezone=True)`
+  columns store microsecond precision, so a restored timestamp is equal to the original only
+  down to the millisecond, not byte-for-byte — a deliberate trade-off of the type this spec
+  chose (`timestamp-millis`, not `-micros`), not a bug.
+- `employee_versions`, `loads`, and `rejected_records` use Postgres
+  `GENERATED ALWAYS AS IDENTITY` primary keys. Postgres rejects a plain `INSERT` with an
+  explicit value for such a column, and SQLAlchemy's dialect never adds the
+  `OVERRIDING SYSTEM VALUE` clause automatically, so restoring these three tables uses a raw
+  `INSERT ... OVERRIDING SYSTEM VALUE` to preserve the original ids (required for
+  `rejected_records.load_id` FK correctness and round-trip parity), followed by a
+  `setval(pg_get_serial_sequence(...), MAX(id)+1, false)` resync so the next normal insert
+  doesn't collide with a restored id.
+- `TRUNCATE ... CASCADE` is used uniformly on all six tables, not only where the FK graph
+  structurally requires it: since restore is strictly single-table per invocation (no "all
+  tables" mode), an operator can legally restore `departments` alone while `employees` still
+  references old rows, and a plain `TRUNCATE` would fail with a foreign-key error in that
+  case. Restoring a table this way also empties its dependents (e.g. restoring `departments`
+  empties `employees` and `employee_versions` too); restoring the full six-table set means
+  running the CLI (or the admin endpoints) once per table in the order below so every emptied
+  dependent gets its own data back immediately after.
+- `data/` backups live inside the app container's filesystem and are not bind-mounted to the
+  host in `docker-compose.yml` — they do not survive container recreation unless an operator
+  adds a volume mount. Out of scope for this phase.

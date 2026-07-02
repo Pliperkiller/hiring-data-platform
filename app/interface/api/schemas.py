@@ -1,4 +1,4 @@
-"""Request / response Pydantic schemas for the ingestion API (docs/API_CONTRACT.md).
+"""Request / response Pydantic schemas for the ingestion and reports APIs (docs/API_CONTRACT.md).
 
 Row-level models deliberately do NOT type-check field content (id/department/job/name/
 datetime/department_id/job_id all accept Any). app/domain/validation.ValidationService is the
@@ -60,6 +60,21 @@ class IngestResponse(BaseModel):
     accepted: int
     rejected: int
     rejected_rows: list[RejectedRowOut] = []
+
+
+class HiresByQuarterOut(BaseModel):
+    department: str
+    job: str
+    Q1: int
+    Q2: int
+    Q3: int
+    Q4: int
+
+
+class DepartmentAboveAverageOut(BaseModel):
+    id: int
+    department: str
+    hired: int
 
 
 class ErrorDetail(BaseModel):

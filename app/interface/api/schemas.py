@@ -77,6 +77,16 @@ class DepartmentAboveAverageOut(BaseModel):
     hired: int
 
 
+class BackupOut(BaseModel):
+    table: str
+    path: str
+
+
+class RestoreOut(BaseModel):
+    table: str
+    restored: int
+
+
 class ErrorDetail(BaseModel):
     code: str
     message: str

@@ -57,6 +57,31 @@ def test_backup_then_restore_round_trip(client: TestClient, db_session: Session)
     ]
 
 
+def test_download_backup_returns_the_avro_file(client: TestClient, db_session: Session) -> None:
+    SqlAlchemyDepartmentRepository(db_session).upsert(Department(id=1, name="Engineering"))
+    client.post("/admin/backup/departments")
+
+    response = client.get("/admin/backup/departments")
+
+    assert response.status_code == 200
+    assert response.content == (backup_module.DEFAULT_DATA_DIR / "departments.avro").read_bytes()
+    assert response.headers["content-disposition"] == 'attachment; filename="departments.avro"'
+
+
+def test_download_backup_unknown_table_returns_404(client: TestClient) -> None:
+    response = client.get("/admin/backup/bogus")
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "UNKNOWN_TABLE"
+
+
+def test_download_backup_missing_file_returns_404(client: TestClient) -> None:
+    response = client.get("/admin/backup/departments")
+
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "BACKUP_NOT_FOUND"
+
+
 def test_backup_unknown_table_returns_404(client: TestClient) -> None:
     response = client.post("/admin/backup/bogus")
 

@@ -59,6 +59,34 @@ def interpret_backup_result(table: str, result: PostResult) -> BackupOutcome:
     return BackupOutcome(table=table, success=True, path=result.body["path"])
 
 
+@dataclass(frozen=True, slots=True)
+class GetFileResult:
+    """Adapter-agnostic view of one GET call's outcome, for the binary /admin/backup/{table}
+    download route — distinct from PostResult, whose `body` is parsed JSON, not raw bytes."""
+
+    status_code: int
+    content: bytes | None
+    error: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DownloadOutcome:
+    table: str
+    success: bool
+    content: bytes | None = None
+    error_message: str | None = None
+
+
+def interpret_download_result(table: str, result: GetFileResult) -> DownloadOutcome:
+    if result.error is not None or result.status_code != 200 or result.content is None:
+        return DownloadOutcome(
+            table=table,
+            success=False,
+            error_message=result.error or f"HTTP {result.status_code}",
+        )
+    return DownloadOutcome(table=table, success=True, content=result.content)
+
+
 def interpret_restore_result(table: str, result: PostResult) -> RestoreOutcome:
     if result.error is not None or result.status_code != 200 or result.body is None:
         return RestoreOutcome(
@@ -103,12 +131,15 @@ __all__ = [
     "BackupOutcome",
     "RestoreOutcome",
     "ResetOutcome",
+    "GetFileResult",
+    "DownloadOutcome",
     "backup_endpoint",
     "restore_endpoint",
     "reset_endpoint",
     "interpret_backup_result",
     "interpret_restore_result",
     "interpret_reset_result",
+    "interpret_download_result",
     "is_authenticated",
     "is_reset_confirmed",
 ]

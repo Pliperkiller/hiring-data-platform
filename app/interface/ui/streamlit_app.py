@@ -22,10 +22,13 @@ from app.interface.ui.backup_restore import (
     RESET_CONFIRMATION_TEXT,
     TABLE_NAMES,
     BackupOutcome,
+    DownloadOutcome,
+    GetFileResult,
     ResetOutcome,
     RestoreOutcome,
     backup_endpoint,
     interpret_backup_result,
+    interpret_download_result,
     interpret_reset_result,
     interpret_restore_result,
     is_authenticated,
@@ -218,6 +221,19 @@ def _build_admin_post_fn(client: httpx.Client) -> Any:
     return post_fn
 
 
+def _build_admin_get_file_fn(client: httpx.Client) -> Any:
+    def get_file_fn(path: str) -> GetFileResult:
+        try:
+            response = client.get(path)
+        except httpx.HTTPError as exc:
+            return GetFileResult(status_code=0, content=None, error=str(exc))
+        if response.status_code != 200:
+            return GetFileResult(status_code=response.status_code, content=None)
+        return GetFileResult(status_code=response.status_code, content=response.content)
+
+    return get_file_fn
+
+
 def render_admin() -> None:
     """Password-gated Admin tab: backup/restore per table, plus a full database reset.
 
@@ -249,6 +265,7 @@ def render_admin() -> None:
 
     with httpx.Client(base_url=API_BASE_URL, timeout=30.0) as client:
         post_fn = _build_admin_post_fn(client)
+        get_file_fn = _build_admin_get_file_fn(client)
 
         for table in TABLE_NAMES:
             st.subheader(table)
@@ -257,9 +274,15 @@ def render_admin() -> None:
             with col_backup:
                 if st.button(f"Backup {table}", key=f"backup_{table}"):
                     result = post_fn(backup_endpoint(table))
-                    st.session_state[f"backup_outcome_{table}"] = interpret_backup_result(
-                        table, result
-                    )
+                    outcome = interpret_backup_result(table, result)
+                    st.session_state[f"backup_outcome_{table}"] = outcome
+                    if outcome.success:
+                        download_result = get_file_fn(backup_endpoint(table))
+                        st.session_state[f"backup_download_{table}"] = interpret_download_result(
+                            table, download_result
+                        )
+                    else:
+                        st.session_state.pop(f"backup_download_{table}", None)
 
                 backup_outcome: BackupOutcome | None = st.session_state.get(
                     f"backup_outcome_{table}"
@@ -269,6 +292,24 @@ def render_admin() -> None:
                         st.success(f"Backed up to {backup_outcome.path}")
                     else:
                         st.error(backup_outcome.error_message)
+
+                download_outcome: DownloadOutcome | None = st.session_state.get(
+                    f"backup_download_{table}"
+                )
+                if download_outcome is not None:
+                    if download_outcome.success and download_outcome.content is not None:
+                        st.download_button(
+                            f"Download {table}.avro",
+                            data=download_outcome.content,
+                            file_name=f"{table}.avro",
+                            mime="application/octet-stream",
+                            key=f"download_{table}",
+                        )
+                    else:
+                        st.warning(
+                            f"Backup succeeded but preparing the download failed: "
+                            f"{download_outcome.error_message}"
+                        )
 
             with col_restore:
                 confirmed = st.checkbox(

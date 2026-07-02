@@ -29,5 +29,17 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  ui:
+    build: .
+    entrypoint: ["streamlit", "run", "app/interface/ui/streamlit_app.py"]
+    command: ["--server.address=0.0.0.0", "--server.port=8501"]
+    environment:
+      API_BASE_URL: http://app:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      - app
+    restart: unless-stopped
+
 volumes:
   pgdata:

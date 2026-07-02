@@ -6,8 +6,10 @@ from __future__ import annotations
 
 from app.interface.ui.backup_restore import (
     TABLE_NAMES,
+    GetFileResult,
     backup_endpoint,
     interpret_backup_result,
+    interpret_download_result,
     interpret_reset_result,
     interpret_restore_result,
     is_authenticated,
@@ -132,3 +134,32 @@ def test_is_reset_confirmed_requires_exact_text() -> None:
     assert is_reset_confirmed("reset") is False
     assert is_reset_confirmed("RESET ") is False
     assert is_reset_confirmed("") is False
+
+
+def test_interpret_download_result_success() -> None:
+    result = GetFileResult(status_code=200, content=b"avro-bytes")
+
+    outcome = interpret_download_result("departments", result)
+
+    assert outcome.success is True
+    assert outcome.content == b"avro-bytes"
+    assert outcome.error_message is None
+
+
+def test_interpret_download_result_http_error() -> None:
+    result = GetFileResult(status_code=404, content=None)
+
+    outcome = interpret_download_result("bogus", result)
+
+    assert outcome.success is False
+    assert outcome.content is None
+    assert "404" in (outcome.error_message or "")
+
+
+def test_interpret_download_result_network_error() -> None:
+    result = GetFileResult(status_code=0, content=None, error="connection refused")
+
+    outcome = interpret_download_result("departments", result)
+
+    assert outcome.success is False
+    assert outcome.error_message == "connection refused"

@@ -53,7 +53,10 @@ Implementation lives in `app/infrastructure/avro/` (schemas + `codec.py`'s `writ
 `read_avro`) and `app/application/backup.py` / `restore.py`. Both are also reachable over
 HTTP as `POST /admin/backup/{table}` / `POST /admin/restore/{table}` (see `API_CONTRACT.md`
 and `DECISIONS.md`), used by the Streamlit "Admin" tab — the CLI and the HTTP routes call the
-exact same `Backup`/`Restore` use cases, so behavior is identical either way.
+exact same `Backup`/`Restore` use cases, so behavior is identical either way. `GET
+/admin/backup/{table}` additionally serves the existing `data/<table>.avro` as a download,
+used by the Admin tab's "Download `<table>`.avro" button — a plain filesystem read, no use
+case involved.
 
 ## Notes on precision and identity columns
 

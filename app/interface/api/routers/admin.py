@@ -17,7 +17,7 @@ protect these routes from a direct HTTP request.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 
 import app.application.backup as backup_module
@@ -104,6 +104,29 @@ def backup_table(table: str, session: Session = Depends(get_db)) -> BackupOut | 
         return _error(404, "UNKNOWN_TABLE", f"unknown table {table!r}")
     path = _build_backup(session).run(table)
     return BackupOut(table=table, path=str(path))
+
+
+@router.get(
+    "/backup/{table}",
+    summary="Download one table's AVRO backup",
+    description=(
+        "Serves the existing `data/<table>.avro` file as a download; a read, not an action —"
+        "it does not create or refresh the backup (use `POST /admin/backup/{table}` for that "
+        "first). Not reachable externally in a hardened deployment — see the module note on "
+        "`/admin/*` above."
+    ),
+    response_class=FileResponse,
+    response_model=None,
+)
+def download_backup(table: str) -> FileResponse | JSONResponse:
+    try:
+        validate_table_name(table)
+    except ValueError:
+        return _error(404, "UNKNOWN_TABLE", f"unknown table {table!r}")
+    path = backup_module.DEFAULT_DATA_DIR / f"{table}.avro"
+    if not path.is_file():
+        return _error(404, "BACKUP_NOT_FOUND", f"no backup file found for {table!r}")
+    return FileResponse(path, media_type="application/octet-stream", filename=path.name)
 
 
 @router.post(

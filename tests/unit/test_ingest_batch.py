@@ -13,6 +13,7 @@ from app.domain.repositories import (
     JobRepository,
     LoadRepository,
     RejectedRecordRepository,
+    ReportRepository,
 )
 from app.domain.validation import ValidationService
 
@@ -140,12 +141,33 @@ class FakeRejectedRecordRepository(RejectedRecordRepository):
         return [r for r in self._records if r.load_id == load_id]
 
 
+class FakeReportRepository(ReportRepository):
+    def __init__(self, raise_on_refresh: bool = False) -> None:
+        self.refresh_calls = 0
+        self._raise_on_refresh = raise_on_refresh
+
+    def refresh_views(self) -> None:
+        self.refresh_calls += 1
+        if self._raise_on_refresh:
+            raise RuntimeError("refresh failed")
+
+    def list_hires_by_quarter(self) -> list[Any]:
+        return []
+
+    def list_departments_above_average(self) -> list[Any]:
+        return []
+
+
 class FakeSession:
     def __init__(self) -> None:
         self.commit_count = 0
+        self.rollback_count = 0
 
     def commit(self) -> None:
         self.commit_count += 1
+
+    def rollback(self) -> None:
+        self.rollback_count += 1
 
 
 @dataclass
@@ -157,6 +179,7 @@ class Harness:
     employee_version_repo: FakeEmployeeVersionRepository
     load_repo: FakeLoadRepository
     rejected_record_repo: FakeRejectedRecordRepository
+    report_repo: FakeReportRepository
     session: FakeSession
 
 
@@ -165,6 +188,7 @@ def make_harness(
     job_ids: set[int] | None = None,
     existing_employee: Employee | None = None,
     existing_version: EmployeeVersion | None = None,
+    raise_on_refresh: bool = False,
 ) -> Harness:
     department_repo = FakeDepartmentRepository(
         {id_: Department(id=id_, name=f"Dept {id_}") for id_ in (department_ids or {1})}
@@ -180,6 +204,7 @@ def make_harness(
         employee_version_repo.add(existing_version)
     load_repo = FakeLoadRepository()
     rejected_record_repo = FakeRejectedRecordRepository()
+    report_repo = FakeReportRepository(raise_on_refresh=raise_on_refresh)
     session = FakeSession()
     use_case = IngestBatch(
         department_repo=department_repo,
@@ -188,6 +213,7 @@ def make_harness(
         employee_version_repo=employee_version_repo,
         load_repo=load_repo,
         rejected_record_repo=rejected_record_repo,
+        report_repo=report_repo,
         validation_service=ValidationService(department_repo=department_repo, job_repo=job_repo),
         session=session,  # type: ignore[arg-type]
     )
@@ -199,6 +225,7 @@ def make_harness(
         employee_version_repo=employee_version_repo,
         load_repo=load_repo,
         rejected_record_repo=rejected_record_repo,
+        report_repo=report_repo,
         session=session,
     )
 
@@ -266,7 +293,8 @@ def test_ingest_departments_all_valid_upserts_and_commits() -> None:
     assert result.accepted == 3
     assert result.rejected == 0
     assert result.rejected_rows == ()
-    assert harness.session.commit_count == 1
+    assert harness.session.commit_count == 2
+    assert harness.report_repo.refresh_calls == 1
     load = harness.load_repo.get(result.load_id)
     assert load is not None
     assert load.source == "api:departments"
@@ -433,3 +461,31 @@ def test_ingest_all_rejected_records_share_one_load_id() -> None:
     records = harness.rejected_record_repo.list_for_load(result.load_id)
     assert len(records) == 3
     assert all(r.load_id == result.load_id for r in records)
+
+
+def test_ingest_refreshes_report_views_once_after_successful_batch() -> None:
+    harness = make_harness()
+    rows = [make_department_row(id=1)]
+
+    harness.use_case.ingest_departments(rows)
+
+    assert harness.report_repo.refresh_calls == 1
+    assert harness.session.commit_count == 2
+    assert harness.session.rollback_count == 0
+
+
+def test_ingest_refresh_failure_is_swallowed_and_batch_result_still_returned() -> None:
+    harness = make_harness(raise_on_refresh=True)
+    rows = [
+        make_department_row(id=1, department="Engineering"),
+        make_department_row(id=2, department="Sales"),
+    ]
+
+    result = harness.use_case.ingest_departments(rows)
+
+    assert result.accepted == 2
+    assert result.rejected == 0
+    assert harness.report_repo.refresh_calls == 1
+    assert harness.session.commit_count == 1
+    assert harness.session.rollback_count == 1
+    assert harness.department_repo.exists(2)

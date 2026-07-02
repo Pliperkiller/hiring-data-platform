@@ -21,6 +21,33 @@ def test_upgrade_head_creates_all_tables(engine) -> None:  # type: ignore[no-unt
     assert expected.issubset(tables)
 
 
+def test_upgrade_head_creates_report_materialized_views(engine) -> None:  # type: ignore[no-untyped-def]
+    views = set(inspect(engine).get_materialized_view_names())
+    assert {"report_hires_by_quarter", "report_departments_above_average"}.issubset(views)
+
+
+def test_report_materialized_views_refresh_after_data_loaded(db_session: Session) -> None:
+    db_session.execute(text("INSERT INTO departments (id, department) VALUES (1, 'Eng')"))
+    db_session.execute(text("INSERT INTO jobs (id, job) VALUES (1, 'Recruiter')"))
+    db_session.execute(
+        text(
+            "INSERT INTO employees "
+            "(employee_id, name_at_hire, hire_datetime, hire_department_id, hire_job_id) "
+            "VALUES (1, 'Alice', :hire_datetime, 1, 1)"
+        ),
+        {"hire_datetime": datetime(2021, 3, 15, tzinfo=UTC)},
+    )
+    db_session.flush()
+
+    db_session.execute(text("REFRESH MATERIALIZED VIEW report_hires_by_quarter"))
+    db_session.execute(text("REFRESH MATERIALIZED VIEW report_departments_above_average"))
+
+    hires_row = db_session.execute(
+        text("SELECT department, job, \"Q1\" FROM report_hires_by_quarter")
+    ).one()
+    assert hires_row == ("Eng", "Recruiter", 1)
+
+
 def test_employee_versions_partial_unique_index_enforced(db_session: Session) -> None:
     db_session.execute(text("INSERT INTO departments (id, department) VALUES (1, 'Eng')"))
     db_session.execute(text("INSERT INTO jobs (id, job) VALUES (1, 'Recruiter')"))

@@ -14,6 +14,7 @@ from app.infrastructure.db.repositories import (
     SqlAlchemyJobRepository,
     SqlAlchemyLoadRepository,
     SqlAlchemyRejectedRecordRepository,
+    SqlAlchemyReportRepository,
 )
 from app.interface.api.dependencies import get_db
 from app.interface.api.schemas import (
@@ -37,6 +38,7 @@ def _build_use_case(session: Session) -> IngestBatch:
         employee_version_repo=SqlAlchemyEmployeeVersionRepository(session),
         load_repo=SqlAlchemyLoadRepository(session),
         rejected_record_repo=SqlAlchemyRejectedRecordRepository(session),
+        report_repo=SqlAlchemyReportRepository(session),
         validation_service=ValidationService(department_repo=department_repo, job_repo=job_repo),
         session=session,
     )

@@ -151,6 +151,13 @@ class IngestBatch:
 
         self._load_repo.mark_finished(load.id, accepted=accepted, rejected=rejected)
         self._session.commit()
+        logger.info(
+            "Load finished: source=%s load_id=%s accepted=%s rejected=%s",
+            source,
+            load.id,
+            accepted,
+            rejected,
+        )
 
         try:
             self._report_repo.refresh_views()

@@ -45,16 +45,24 @@ Restore does not re-validate: a backup is trusted, already-clean data.
 ## Commands (shape)
 
 ```
-python -m app.application.backup <table>     # writes data/<table>.avro
-python -m app.application.restore <table>    # replaces <table> from data/<table>.avro
+python -m app.interface.cli.backup <table>     # writes data/<table>.avro
+python -m app.interface.cli.restore <table>    # replaces <table> from data/<table>.avro
 ```
 
-Implementation lives in `app/infrastructure/avro/` (schemas + `codec.py`'s `write_avro`/
-`read_avro`) and `app/application/backup.py` / `restore.py`. Both are also reachable over
-HTTP as `POST /admin/backup/{table}` / `POST /admin/restore/{table}` (see `API_CONTRACT.md`
-and `DECISIONS.md`), used by the Streamlit "Admin" tab — the CLI and the HTTP routes call the
-exact same `Backup`/`Restore` use cases, so behavior is identical either way. `GET
-/admin/backup/{table}` additionally serves the existing `data/<table>.avro` as a download,
+The `Backup`/`Restore` use cases (`app/application/backup.py` / `restore.py`) depend only on
+domain abstractions: the six repository ABCs plus `BackupCodec` (`app/domain/backup_codec.py`),
+which also holds `TABLE_NAMES`/`validate_table_name` -- these are business data (which tables
+are in scope), not an AVRO detail, so they don't belong under `app/infrastructure/`. The
+concrete serialization (`fastavro`, in `app/infrastructure/avro/codec.py`'s `write_avro`/
+`read_avro`) is wrapped by `AvroBackupCodec` (`app/infrastructure/avro/avro_backup_codec.py`),
+the only `BackupCodec` implementation. `app/interface/composition.py` is the single place that
+wires concrete repositories and `AvroBackupCodec` into `Backup`/`Restore`; both the CLI
+(`app/interface/cli/backup.py` / `restore.py`) and the admin router build their use cases
+through it, so there is exactly one copy of the wiring logic (see `DECISIONS.md`). Both are
+also reachable over HTTP as `POST /admin/backup/{table}` / `POST /admin/restore/{table}` (see
+`API_CONTRACT.md` and `DECISIONS.md`), used by the Streamlit "Admin" tab — the CLI and the HTTP
+routes call the exact same `Backup`/`Restore` use cases, so behavior is identical either way.
+`GET /admin/backup/{table}` additionally serves the existing `data/<table>.avro` as a download,
 used by the Admin tab's "Download `<table>`.avro" button — a plain filesystem read, no use
 case involved.
 

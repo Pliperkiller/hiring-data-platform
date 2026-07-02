@@ -17,11 +17,12 @@ from sqlalchemy.orm import Session
 
 from app.application.backup import Backup
 from app.application.restore import Restore
+from app.domain.backup_codec import TABLE_NAMES
 from app.domain.employee import Employee, EmployeeVersion
 from app.domain.reference import Department, Job
 from app.domain.rejected_record import Load, RejectedRecord
 from app.domain.value_objects import ReasonCode
-from app.infrastructure.avro.tables import TABLE_NAMES
+from app.infrastructure.avro.avro_backup_codec import AvroBackupCodec
 from app.infrastructure.db.repositories import (
     SqlAlchemyDepartmentRepository,
     SqlAlchemyEmployeeRepository,
@@ -48,6 +49,7 @@ def make_backup(session: Session, data_dir: Path) -> Backup:
         employee_version_repo=SqlAlchemyEmployeeVersionRepository(session),
         load_repo=SqlAlchemyLoadRepository(session),
         rejected_record_repo=SqlAlchemyRejectedRecordRepository(session),
+        codec=AvroBackupCodec(),
         data_dir=data_dir,
     )
 
@@ -61,6 +63,7 @@ def make_restore(session: Session, data_dir: Path) -> Restore:
         load_repo=SqlAlchemyLoadRepository(session),
         rejected_record_repo=SqlAlchemyRejectedRecordRepository(session),
         session=session,
+        codec=AvroBackupCodec(),
         data_dir=data_dir,
     )
 

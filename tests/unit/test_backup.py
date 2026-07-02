@@ -7,11 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from app.application.backup import Backup, main
+from app.application.backup import Backup
 from app.domain.employee import Employee, EmployeeVersion
 from app.domain.reference import Department, Job
 from app.domain.rejected_record import Load, RejectedRecord
 from app.domain.value_objects import ReasonCode
+from app.infrastructure.avro.avro_backup_codec import AvroBackupCodec
 from app.infrastructure.avro.codec import read_avro
 from tests.unit.fakes import (
     FakeDepartmentRepository,
@@ -75,6 +76,7 @@ def make_backup(tmp_path: Path) -> Backup:
                 )
             ]
         ),
+        codec=AvroBackupCodec(),
         data_dir=tmp_path,
     )
 
@@ -107,26 +109,3 @@ def test_backup_run_rejects_unknown_table(tmp_path: Path) -> None:
         backup.run("bogus")
 
     assert list(tmp_path.iterdir()) == []
-
-
-def test_main_rejects_bad_argv_count_without_touching_the_db(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def _fail_if_called(*args: object, **kwargs: object) -> None:
-        raise AssertionError("build_engine must not be called for invalid argv")
-
-    monkeypatch.setattr("app.infrastructure.db.session.build_engine", _fail_if_called)
-
-    assert main(["backup.py"]) == 2
-    assert main(["backup.py", "departments", "extra"]) == 2
-
-
-def test_main_rejects_unknown_table_without_touching_the_db(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def _fail_if_called(*args: object, **kwargs: object) -> None:
-        raise AssertionError("build_engine must not be called for an unknown table")
-
-    monkeypatch.setattr("app.infrastructure.db.session.build_engine", _fail_if_called)
-
-    assert main(["backup.py", "bogus"]) == 2

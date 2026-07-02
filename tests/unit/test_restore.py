@@ -7,8 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from app.application.restore import Restore, main
+from app.application.restore import Restore
 from app.domain.reference import Department
+from app.infrastructure.avro.avro_backup_codec import AvroBackupCodec
 from app.infrastructure.avro.codec import write_avro
 from tests.unit.fakes import (
     FakeDepartmentRepository,
@@ -34,6 +35,7 @@ def make_restore(tmp_path: Path) -> tuple[Restore, FakeDepartmentRepository, Fak
         load_repo=FakeLoadRepository(),
         rejected_record_repo=FakeRejectedRecordRepository(),
         session=session,  # type: ignore[arg-type]
+        codec=AvroBackupCodec(),
         data_dir=tmp_path,
     )
     return restore, department_repo, session
@@ -78,26 +80,3 @@ def test_restore_run_returns_row_count(tmp_path: Path) -> None:
     restore, _, _ = make_restore(tmp_path)
 
     assert restore.run("departments") == 2
-
-
-def test_main_rejects_bad_argv_count_without_touching_the_db(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def _fail_if_called(*args: object, **kwargs: object) -> None:
-        raise AssertionError("build_engine must not be called for invalid argv")
-
-    monkeypatch.setattr("app.infrastructure.db.session.build_engine", _fail_if_called)
-
-    assert main(["restore.py"]) == 2
-    assert main(["restore.py", "departments", "extra"]) == 2
-
-
-def test_main_rejects_unknown_table_without_touching_the_db(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def _fail_if_called(*args: object, **kwargs: object) -> None:
-        raise AssertionError("build_engine must not be called for an unknown table")
-
-    monkeypatch.setattr("app.infrastructure.db.session.build_engine", _fail_if_called)
-
-    assert main(["restore.py", "bogus"]) == 2

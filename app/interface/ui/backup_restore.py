@@ -2,7 +2,7 @@
 
 Thin HTTP client only, matching historical_load.py's decision: no imports from app.domain or
 app.infrastructure, so the six table names are redeclared here rather than imported from
-app.infrastructure.avro.tables. No network, no Streamlit — unit-testable in isolation, called
+app.domain.backup_codec. No network, no Streamlit — unit-testable in isolation, called
 by the Streamlit page (real httpx post_fn) and by tests (fake post_fn).
 """
 

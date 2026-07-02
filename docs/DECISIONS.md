@@ -257,7 +257,7 @@ summing to 1643 (total valid 2021 hires); report 2 yields 7 departments above th
   here. A dict literal is also what `fastavro.writer`/`reader` accept directly, with no
   file-loading indirection, and gets real mypy/ruff coverage that a `.avsc` file would not.
 - **Backup and restore CLIs are strictly single-table**, matching `python -m
-  app.application.backup/restore <table>` — no "all tables" mode. An operator backs up or
+  app.interface.cli.backup/restore <table>` — no "all tables" mode. An operator backs up or
   restores everything by invoking the command six times in the documented order.
 - **`TRUNCATE TABLE <name> CASCADE`, uniformly on all six tables.** Because restore is
   single-table per invocation, an operator can legally restore `departments` alone while
@@ -311,6 +311,35 @@ summing to 1643 (total valid 2021 hires); report 2 yields 7 departments above th
   (`./data:/code/data` in `docker-compose.yml`). Previously it was not: backups lived only
   inside the app container's filesystem and did not survive a container recreate (only a
   restart) unless an operator added a volume mount by hand — that gap is now closed.
+- **Layering fix: `Backup`/`Restore` and their wiring were pulled back onto the same rule
+  `IngestBatch` already follows -- `app/application/*` depends only on `app.domain`, never on
+  a concrete infrastructure library, no matter how small its surface area seems.** Phase 6
+  shipped two violations of that rule: (1) `_build_backup`/`_build_restore`/`main(argv)`
+  inside `app/application/backup.py` and `restore.py` imported the concrete
+  `SqlAlchemy*Repository` classes directly, and `admin.py` held its own second, duplicate copy
+  of that same wiring; (2) `Backup.run()`/`Restore.run()` themselves called
+  `to_avro_dicts`/`write_avro`/`from_avro_dicts`/`read_avro` from
+  `app.infrastructure.avro.codec` directly, coupling the use case to `fastavro` the same way
+  persistence was already decoupled via repository ABCs, just never applied to serialization.
+  Fixed by: adding a `BackupCodec` ABC (`write`/`read`) that `Backup`/`Restore` now depend on
+  via constructor injection, implemented as `AvroBackupCodec`
+  (`app/infrastructure/avro/avro_backup_codec.py`) wrapping the existing codec functions
+  unchanged; moving all wiring into one composition root, `app/interface/composition.py`
+  (`build_backup`/`build_restore`), used by both the admin router and the new CLI adapters
+  under `app/interface/cli/`; and stripping `app/application/backup.py`/`restore.py` down to
+  just the `Backup`/`Restore` classes. `grep -n "^from app.infrastructure\|^import
+  app.infrastructure"` on both files now returns nothing.
+- **`BackupCodec` lives in its own `app/domain/backup_codec.py`, not `repositories.py`.**
+  `repositories.py`'s own docstring scopes it to "the CRUD verbs exercisable this phase" on
+  entity repositories; a codec converting entities to/from a portable file format is a
+  different outbound port (serialization, not persistence), so it gets its own module.
+- **`TABLE_NAMES`/`validate_table_name` moved from `app/infrastructure/avro/tables.py` into
+  `app/domain/backup_codec.py` too**, beyond what the layering audit explicitly flagged. Those
+  six table names are business data (which aggregates support backup/restore), not an AVRO
+  detail; they were only ever under `infrastructure/avro/` because Phase 6 introduced them
+  alongside the AVRO work. Leaving them in place would have left `Backup.run()`/`Restore.run()`
+  importing `app.infrastructure.avro.tables` for name validation, re-opening the exact
+  violation this fix closes.
 
 ## Miscellaneous
 

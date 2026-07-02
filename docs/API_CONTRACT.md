@@ -130,7 +130,7 @@ Backup and restore are administration operations (restore is destructive: full r
 truncate + insert). They are reachable two ways, both calling the exact same use cases:
 
 1. **CLI**, for direct operator use inside the app container:
-   `python -m app.application.backup <table>` / `python -m app.application.restore <table>`.
+   `python -m app.interface.cli.backup <table>` / `python -m app.interface.cli.restore <table>`.
 2. **`POST /admin/backup/{table}`** and **`POST /admin/restore/{table}`**, for the
    Streamlit "Admin" tab. `table` is one of `departments`, `jobs`, `employees`,
    `employee_versions`, `loads`, `rejected_records`.

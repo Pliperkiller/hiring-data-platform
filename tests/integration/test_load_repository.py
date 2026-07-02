@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from sqlalchemy.orm import Session
 
@@ -72,3 +74,51 @@ def test_restore_all_preserves_id_and_resyncs_sequence(db_session: Session) -> N
     next_created = repo.create(Load(source="api:departments"))
     assert next_created.id is not None
     assert next_created.id > created.id
+
+
+def test_recent_stats_only_counts_finished_loads_in_window(db_session: Session) -> None:
+    repo = SqlAlchemyLoadRepository(db_session)
+    since = datetime.now(UTC) - timedelta(minutes=1)
+
+    first = repo.create(Load(source="api:departments"))
+    assert first.id is not None
+    repo.mark_finished(first.id, accepted=8, rejected=2)
+
+    second = repo.create(Load(source="api:jobs"))
+    assert second.id is not None
+    repo.mark_finished(second.id, accepted=5, rejected=5)
+
+    # In-flight load: no finished_at yet, must not be counted.
+    repo.create(Load(source="api:hired_employees"))
+
+    stats = repo.recent_stats(since)
+
+    assert stats.total_loads == 2
+    assert stats.total_accepted == 13
+    assert stats.total_rejected == 7
+    assert stats.average_reject_rate == pytest.approx(7 / 20)
+
+
+def test_recent_stats_excludes_loads_before_since(db_session: Session) -> None:
+    repo = SqlAlchemyLoadRepository(db_session)
+    old = repo.create(Load(source="api:departments"))
+    assert old.id is not None
+    repo.mark_finished(old.id, accepted=1, rejected=1)
+
+    cutoff = datetime.now(UTC) + timedelta(minutes=1)
+
+    stats = repo.recent_stats(cutoff)
+
+    assert stats.total_loads == 0
+    assert stats.total_accepted == 0
+    assert stats.total_rejected == 0
+    assert stats.average_reject_rate == 0.0
+
+
+def test_recent_stats_empty_window_returns_zero_rate(db_session: Session) -> None:
+    repo = SqlAlchemyLoadRepository(db_session)
+
+    stats = repo.recent_stats(datetime.now(UTC) - timedelta(days=7))
+
+    assert stats.total_loads == 0
+    assert stats.average_reject_rate == 0.0

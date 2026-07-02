@@ -177,6 +177,74 @@ class TestRunHistoricalLoadAggregation:
         assert first.batch_index != second.batch_index
         assert first != second
 
+    def test_file_row_computed_within_one_batch(self) -> None:
+        def post_fn(table: TableName, batch: list[dict[str, Any]]) -> PostResult:
+            rejected_row = {
+                "row_index": 1,
+                "field": "id",
+                "reason_code": "MISSING_ID",
+                "message": "id is empty or not an integer",
+            }
+            return PostResult(
+                status_code=200,
+                body=_success_body(accepted=1, rejected=1, rejected_rows=[rejected_row]),
+            )
+
+        files = {"departments": _rows(2)}
+
+        summary = run_historical_load(files, post_fn, batch_size=2)
+
+        assert len(summary.rejected_rows) == 1
+        assert summary.rejected_rows[0].file_row == 2
+
+    def test_file_row_at_exact_batch_size_boundary(self) -> None:
+        def post_fn(table: TableName, batch: list[dict[str, Any]]) -> PostResult:
+            row_index = 999 if len(batch) == 1000 else 0
+            rejected_row = {
+                "row_index": row_index,
+                "field": "id",
+                "reason_code": "MISSING_ID",
+                "message": "id is empty or not an integer",
+            }
+            return PostResult(
+                status_code=200,
+                body=_success_body(
+                    accepted=len(batch) - 1, rejected=1, rejected_rows=[rejected_row]
+                ),
+            )
+
+        files = {"departments": _rows(1001)}
+
+        summary = run_historical_load(files, post_fn, batch_size=1000)
+
+        assert len(summary.rejected_rows) == 2
+        first, second = summary.rejected_rows
+        assert first.batch_index == 0
+        assert first.row_index == 999
+        assert first.file_row == 1000
+        assert second.batch_index == 1
+        assert second.row_index == 0
+        assert second.file_row == 1001
+
+    def test_raw_payload_matches_the_exact_submitted_row(self) -> None:
+        def post_fn(table: TableName, batch: list[dict[str, Any]]) -> PostResult:
+            rejected_row = {
+                "row_index": 2,
+                "field": "id",
+                "reason_code": "MISSING_ID",
+                "message": "id is empty or not an integer",
+            }
+            return PostResult(
+                status_code=200,
+                body=_success_body(accepted=2, rejected=1, rejected_rows=[rejected_row]),
+            )
+
+        files = {"departments": _rows(3)}
+
+        summary = run_historical_load(files, post_fn, batch_size=3)
+
+        assert summary.rejected_rows[0].raw_payload == {"id": 2}
+
 
 class TestRunHistoricalLoadFailureHandling:
     def test_raising_post_fn_is_recorded_as_failed_batch_and_run_continues(self) -> None:

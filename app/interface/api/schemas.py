@@ -18,21 +18,36 @@ from app.interface.ingest_constants import MAX_BATCH_SIZE, MIN_BATCH_SIZE
 
 
 class DepartmentIn(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(
+        extra="allow", json_schema_extra={"example": {"id": 1, "department": "Engineering"}}
+    )
 
     id: Any = None
     department: Any = None
 
 
 class JobIn(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(
+        extra="allow", json_schema_extra={"example": {"id": 1, "job": "Recruiter"}}
+    )
 
     id: Any = None
     job: Any = None
 
 
 class HireIn(BaseModel):
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(
+        extra="allow",
+        json_schema_extra={
+            "example": {
+                "id": 101,
+                "name": "Ada Lovelace",
+                "datetime": "2021-02-10T09:30:00Z",
+                "department_id": 1,
+                "job_id": 5,
+            }
+        },
+    )
 
     id: Any = None
     name: Any = None
@@ -56,6 +71,30 @@ class RejectedRowOut(BaseModel):
 
 
 class IngestResponse(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "load_id": 42,
+                "accepted": 950,
+                "rejected": 2,
+                "rejected_rows": [
+                    {
+                        "row_index": 3,
+                        "field": "job_id",
+                        "reason_code": "MISSING_JOB",
+                        "message": "job_id is empty",
+                    },
+                    {
+                        "row_index": 7,
+                        "field": "department_id",
+                        "reason_code": "UNKNOWN_DEPARTMENT",
+                        "message": "department_id 999 does not exist",
+                    },
+                ],
+            }
+        }
+    )
+
     load_id: int
     accepted: int
     rejected: int
@@ -63,6 +102,19 @@ class IngestResponse(BaseModel):
 
 
 class HiresByQuarterOut(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "department": "Engineering",
+                "job": "Software Engineer",
+                "Q1": 3,
+                "Q2": 5,
+                "Q3": 2,
+                "Q4": 4,
+            }
+        }
+    )
+
     department: str
     job: str
     Q1: int
@@ -72,19 +124,37 @@ class HiresByQuarterOut(BaseModel):
 
 
 class DepartmentAboveAverageOut(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"id": 8, "department": "Support", "hired": 216}}
+    )
+
     id: int
     department: str
     hired: int
 
 
 class BackupOut(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"table": "departments", "path": "data/departments.avro"}}
+    )
+
     table: str
     path: str
 
 
 class RestoreOut(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"table": "departments", "restored": 12}}
+    )
+
     table: str
     restored: int
+
+
+class ResetOut(BaseModel):
+    model_config = ConfigDict(json_schema_extra={"example": {"reset": True}})
+
+    reset: bool = True
 
 
 class ErrorDetail(BaseModel):

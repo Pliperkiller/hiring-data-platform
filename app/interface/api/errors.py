@@ -1,9 +1,10 @@
 """Exception handlers mapping errors to the structured error body (docs/API_CONTRACT.md).
 
-Two handlers: RequestValidationError (422) and a catch-all Exception (500). Logging uses
-Python's stdlib `logging` module with default configuration only — no new logging
-infrastructure, handlers, or structured-logging setup here. Structured logging is
-docs/ROADMAP.md's Phase 7; this handler must not anticipate or partially build it.
+Two handlers: RequestValidationError (422) and a catch-all Exception (500), both consistently
+producing the {"error": {"code","message","detail"}} shape. Logging uses Python's stdlib
+`logging` module via a plain module-level logger; level and format are configured once, at API
+startup, by app.infrastructure.logging_config.configure_logging() — this module doesn't own any
+logging setup itself, just its own logger.exception() call below.
 """
 
 from __future__ import annotations

@@ -22,8 +22,11 @@ services:
     build: .
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://hiring:change-me@db:5432/hiring}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     ports:
       - "8000:8000"
+    volumes:
+      - ./data:/code/data
     depends_on:
       db:
         condition: service_healthy
@@ -35,6 +38,7 @@ services:
     command: ["--server.address=0.0.0.0", "--server.port=8501"]
     environment:
       API_BASE_URL: http://app:8000
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me}
     ports:
       - "8501:8501"
     depends_on:

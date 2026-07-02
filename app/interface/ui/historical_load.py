@@ -59,6 +59,9 @@ class RejectedRowSummary:
 
     The API's row_index is only unique within one batch's response; (table, batch_index,
     row_index) is the key that disambiguates it across a whole historical-load run.
+    batch_index is kept for that internal disambiguation but is no longer surfaced as a
+    displayed UI column — file_row (the 1-based row number within the original source file)
+    is the human-facing equivalent, computed client-side with no API change.
     """
 
     table: TableName
@@ -67,6 +70,8 @@ class RejectedRowSummary:
     field: str | None
     reason_code: str
     message: str
+    file_row: int
+    raw_payload: dict[str, Any]
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,8 +158,13 @@ def chunk_rows(
 
 
 def _outcome_from_post_result(
-    table: TableName, batch_index: int, row_count: int, result: PostResult
+    table: TableName,
+    batch_index: int,
+    batch: list[dict[str, Any]],
+    batch_size: int,
+    result: PostResult,
 ) -> tuple[BatchOutcome, list[RejectedRowSummary]]:
+    row_count = len(batch)
     if result.error is not None or result.status_code != 200 or result.body is None:
         message = result.error or f"HTTP {result.status_code}: {result.body}"
         return (
@@ -177,6 +187,8 @@ def _outcome_from_post_result(
             field=r.get("field"),
             reason_code=r["reason_code"],
             message=r["message"],
+            file_row=batch_index * batch_size + r["row_index"] + 1,
+            raw_payload=batch[r["row_index"]],
         )
         for r in body.get("rejected_rows", [])
     ]
@@ -218,7 +230,7 @@ def run_historical_load(
                 result = PostResult(status_code=0, body=None, error=str(exc))
 
             outcome, batch_rejected = _outcome_from_post_result(
-                table, batch_index, len(batch), result
+                table, batch_index, batch, batch_size, result
             )
             outcomes.append(outcome)
             rejected.extend(batch_rejected)

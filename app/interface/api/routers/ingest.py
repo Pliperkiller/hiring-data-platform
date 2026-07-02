@@ -61,7 +61,15 @@ def _to_response(result: IngestResult) -> IngestResponse:
     )
 
 
-@router.post("/departments", response_model=IngestResponse)
+@router.post(
+    "/departments",
+    response_model=IngestResponse,
+    summary="Ingest a batch of departments",
+    description=(
+        "Upserts 1-1000 departments by id. Invalid rows are rejected and logged, never "
+        "coerced; a partial success (some rows accepted, some rejected) returns 200."
+    ),
+)
 def ingest_departments(
     rows: DepartmentBatch, session: Session = Depends(get_db)
 ) -> IngestResponse:
@@ -70,14 +78,32 @@ def ingest_departments(
     return _to_response(result)
 
 
-@router.post("/jobs", response_model=IngestResponse)
+@router.post(
+    "/jobs",
+    response_model=IngestResponse,
+    summary="Ingest a batch of jobs",
+    description=(
+        "Upserts 1-1000 jobs by id. Invalid rows are rejected and logged, never coerced; a "
+        "partial success (some rows accepted, some rejected) returns 200."
+    ),
+)
 def ingest_jobs(rows: JobBatch, session: Session = Depends(get_db)) -> IngestResponse:
     use_case = _build_use_case(session)
     result = use_case.ingest_jobs([r.model_dump() for r in rows])
     return _to_response(result)
 
 
-@router.post("/hired_employees", response_model=IngestResponse)
+@router.post(
+    "/hired_employees",
+    response_model=IngestResponse,
+    summary="Ingest a batch of hires",
+    description=(
+        "Applies SCD Type 2 versioning for 1-1000 hires: a new employee gets an initial "
+        "version, a changed re-upload opens a new version, an identical re-upload is a "
+        "no-op. Invalid rows (bad schema, unknown department/job) are rejected and logged, "
+        "never coerced; a partial success returns 200."
+    ),
+)
 def ingest_hired_employees(
     rows: HireBatch, session: Session = Depends(get_db)
 ) -> IngestResponse:

@@ -1,11 +1,14 @@
+import logging
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
+
 from app.application.ingest_batch import IngestBatch
 from app.domain.employee import Employee, EmployeeVersion
 from app.domain.reference import Department, Job
-from app.domain.rejected_record import Load, RejectedRecord
+from app.domain.rejected_record import Load, LoadStats, RejectedRecord
 from app.domain.repositories import (
     DepartmentRepository,
     EmployeeRepository,
@@ -145,6 +148,20 @@ class FakeLoadRepository(LoadRepository):
 
     def list_all(self) -> list[Load]:
         return list(self._loads.values())
+
+    def recent_stats(self, since: datetime) -> LoadStats:
+        finished = [
+            load
+            for load in self._loads.values()
+            if load.finished_at is not None
+            and load.started_at is not None
+            and load.started_at >= since
+        ]
+        return LoadStats.compute(
+            total_loads=len(finished),
+            total_accepted=sum(load.accepted for load in finished),
+            total_rejected=sum(load.rejected for load in finished),
+        )
 
     def truncate(self) -> None:
         self._loads.clear()
@@ -527,3 +544,23 @@ def test_ingest_refresh_failure_is_swallowed_and_batch_result_still_returned() -
     assert harness.session.commit_count == 1
     assert harness.session.rollback_count == 1
     assert harness.department_repo.exists(2)
+
+
+def test_ingest_logs_load_finished_with_source_and_counts(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    harness = make_harness()
+    rows = [make_department_row(id=1), make_department_row(id="bad")]
+
+    with caplog.at_level(logging.INFO, logger="app.application.ingest_batch"):
+        result = harness.use_case.ingest_departments(rows)
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(
+        "Load finished" in message
+        and "source=api:departments" in message
+        and f"load_id={result.load_id}" in message
+        and "accepted=1" in message
+        and "rejected=1" in message
+        for message in messages
+    )

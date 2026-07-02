@@ -15,7 +15,7 @@ from sqlalchemy.sql import func
 
 from app.domain.employee import Employee, EmployeeVersion
 from app.domain.reference import Department, Job
-from app.domain.rejected_record import Load, RejectedRecord
+from app.domain.rejected_record import Load, LoadStats, RejectedRecord
 from app.domain.report import DepartmentAboveAverageRow, HireByQuarterRow
 from app.domain.repositories import (
     DepartmentRepository,
@@ -275,6 +275,22 @@ class SqlAlchemyLoadRepository(LoadRepository):
     def list_all(self) -> list[Load]:
         rows = self._session.scalars(select(LoadModel).order_by(LoadModel.id))
         return [self._to_domain(r) for r in rows]
+
+    def recent_stats(self, since: datetime) -> LoadStats:
+        # Only finished loads: an in-flight load's accepted/rejected counts aren't meaningful yet.
+        row = self._session.execute(
+            select(
+                func.count(LoadModel.id),
+                func.coalesce(func.sum(LoadModel.accepted), 0),
+                func.coalesce(func.sum(LoadModel.rejected), 0),
+            ).where(LoadModel.started_at >= since, LoadModel.finished_at.is_not(None))
+        ).one()
+        total_loads, total_accepted, total_rejected = row
+        return LoadStats.compute(
+            total_loads=total_loads,
+            total_accepted=total_accepted,
+            total_rejected=total_rejected,
+        )
 
     def truncate(self) -> None:
         self._session.execute(text("TRUNCATE TABLE loads CASCADE"))

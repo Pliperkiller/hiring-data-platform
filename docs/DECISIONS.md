@@ -112,14 +112,22 @@ data; a few were product decisions from requirements.
 
 - **Three separate `st.file_uploader` widgets, not one multi-file uploader.** The CSVs are
   headerless and carry no metadata identifying which table they belong to; explicit
-  per-table uploaders (labeled "departments.csv", "jobs.csv", "hired_employees.csv") are
-  simpler and more robust than filename-sniffing or column-count heuristics, and match how
-  the challenge ships three separate files.
+  per-table uploaders (labeled "Departments", "Jobs", "Hired employees" — cosmetic rename in
+  Phase 7, was "departments.csv"/"jobs.csv"/"hired_employees.csv"; the `key=` values driving
+  `session_state` are unchanged) are simpler and more robust than filename-sniffing or
+  column-count heuristics, and match how the challenge ships three separate files.
 - **Rejected rows are disambiguated with `table` + `batch_index` + `row_index`.** The API's
   `row_index` is only unique within one batch's response; running three tables across many
   batches needs `table` (which table) and `batch_index` (0-based, per-table batch sequence
   number) alongside it so the combined summary table never conflates row 0 of hires batch 2
   with row 0 of departments batch 0.
+- **Phase 7: `file_row` and `raw_payload` added to the rejected-rows table; `batch_index`
+  becomes internal-only.** `batch_index` disambiguates correctly but isn't meaningful to an
+  operator staring at a CSV; `file_row` is the 1-based row number within the original source
+  file (`batch_index * batch_size + row_index + 1`), and `raw_payload` is the original row
+  dict, looked up by `(table, batch_index, row_index)` from the batches the UI already built.
+  Both are computed client-side in `historical_load.py` with no API change — `batch_index`
+  stays on `RejectedRowSummary` for the lookup but is no longer a displayed column.
 - **A failed batch (network error, unexpected status) is recorded and skipped, not fatal.**
   `run_historical_load` continues with the next batch of the same table, and subsequent
   tables, rather than aborting the whole run. A `departments`/`jobs` batch failure is
@@ -245,20 +253,41 @@ summing to 1643 (total valid 2021 hires); report 2 yields 7 departments above th
   PKs) restore through their existing `upsert()`/`add()` methods unchanged.
 - **Backup/restore are exposed via `POST /admin/backup/{table}` and `POST
   /admin/restore/{table}`, reversing the earlier "not HTTP endpoints" decision above.** The
-  Streamlit UI gained a "Backup & Restore" tab so an operator can trigger these without a
-  shell into the app container; the admin endpoints and the CLI call the identical `Backup`/
-  `Restore` use cases, so there is exactly one implementation either way. This is a
-  deliberate trade-off, not an oversight: this project has no user/role access control
-  anywhere (`ROADMAP.md`'s out-of-scope list), so `/admin/*` has no authentication of its
-  own, and `POST /admin/restore/{table}` is destructive and reachable by anyone who can reach
-  the API. The Streamlit tab requires a per-table confirmation checkbox before enabling its
-  restore button as a UI-level safeguard, but the real mitigation has to be operational: a
-  production deployment must restrict `/admin/*` at the network/reverse-proxy level (not
-  exposed through the public gateway, or IP-gated), which is outside this repo's scope.
-- **`data/` backup files are not bind-mounted from the app container to the host.** Deferred
-  as an operations follow-up; a durable volume mount is a one-line `docker-compose.yml`
-  change but is out of this phase's scope (implementing correct commands, not deployment
-  durability).
+  Streamlit UI gained an "Admin" tab (see the Phase 7 entries below) so an operator can
+  trigger these without a shell into the app container; the admin endpoints and the CLI call
+  the identical `Backup`/`Restore` use cases, so there is exactly one implementation either
+  way. This is a deliberate trade-off, not an oversight: this project has no user/role access
+  control anywhere (`ROADMAP.md`'s out-of-scope list), so `/admin/*` has no authentication of
+  its own, and `POST /admin/restore/{table}` is destructive and reachable by anyone who can
+  reach the API.
+- **Phase 7: network-level `/admin/*` restriction (127.0.0.1 port binding + routing through a
+  reverse-proxy gateway) was evaluated and explicitly deferred, per product decision.**
+  `app`/`ui` remain on their current published ports in `docker-compose.yml` — no port-binding
+  or gateway change shipped this phase. The only mitigation shipped is UI-level: the Streamlit
+  tab was renamed "Admin" and is now password-gated (an `ADMIN_PASSWORD` environment variable,
+  compared with `secrets.compare_digest`, checked via a real early `return` at the top of the
+  tab's render function — Streamlit re-runs the whole script every rerun regardless of which
+  tab is visually active, so a visual-only hide would not work), plus the per-table restore
+  confirmation checkbox and the new Reset feature's typed `"RESET"` confirmation (see below).
+  **This is explicitly a UI-layer safeguard only: it does not protect `POST
+  /admin/{backup,restore,reset}` against a direct HTTP request that bypasses the UI entirely.**
+  A production deployment restricting `/admin/*` at the network/reverse-proxy level remains the
+  real fix and remains outside this repo's scope.
+- **Phase 7: added a `Reset` use case (`POST /admin/reset`), the 7th admin/ingestion-adjacent
+  use case, mirroring `IngestBatch`'s constructor-injection pattern** (six repos + a
+  `ReportRepository` + `Session`). It truncates all six tables and refreshes both report
+  views, then commits. Deliberately has **no CLI entry point** — unlike Backup/Restore, Reset
+  is reachable only via the endpoint or the password-gated Admin tab's typed confirmation,
+  since it is the single most destructive action in the app. It never touches `data/*.avro`
+  (a DB reset and destroying existing backups are different concerns; doing the latter
+  silently would be a surprising side effect). Unlike `IngestBatch._run_batch`'s refresh (which
+  swallows a refresh failure to protect already-accepted rows in the same transaction), `Reset`
+  has no such asymmetry, so a refresh failure is allowed to propagate to the generic 500
+  handler rather than being logged and swallowed.
+- **Phase 7: `data/` is now bind-mounted from the app container to the host**
+  (`./data:/code/data` in `docker-compose.yml`). Previously it was not: backups lived only
+  inside the app container's filesystem and did not survive a container recreate (only a
+  restart) unless an operator added a volume mount by hand — that gap is now closed.
 
 ## Miscellaneous
 

@@ -24,6 +24,9 @@ class FakeDepartmentRepository(DepartmentRepository):
     def list_all(self) -> list[Department]:
         raise NotImplementedError
 
+    def truncate(self) -> None:
+        raise NotImplementedError
+
 
 class FakeJobRepository(JobRepository):
     def __init__(self, existing_ids: set[int]) -> None:
@@ -39,6 +42,9 @@ class FakeJobRepository(JobRepository):
         raise NotImplementedError
 
     def list_all(self) -> list[Job]:
+        raise NotImplementedError
+
+    def truncate(self) -> None:
         raise NotImplementedError
 
 

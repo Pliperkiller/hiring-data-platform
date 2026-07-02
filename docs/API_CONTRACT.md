@@ -13,6 +13,8 @@ response bodies are JSON.
 | POST | `/ingest/hired_employees` | ingest a batch of hires (applies SCD versioning) |
 | GET | `/reports/hires-by-quarter` | report 1 (2021) |
 | GET | `/reports/departments-above-average` | report 2 (2021) |
+| POST | `/admin/backup/{table}` | back up one table to `data/<table>.avro` |
+| POST | `/admin/restore/{table}` | full-replace restore one table from `data/<table>.avro` |
 | GET | `/health` | liveness check |
 
 ## Ingestion requests
@@ -113,5 +115,37 @@ context. Validation failures raised by the request model surface with a `code` o
 
 ## Backup and restore
 
-Backup and restore are **not** HTTP endpoints. They are administration commands (restore is
-destructive and should only be run by an operator). See `BACKUP_RESTORE.md`.
+Backup and restore are administration operations (restore is destructive: full replace via
+truncate + insert). They are reachable two ways, both calling the exact same use cases:
+
+1. **CLI**, for direct operator use inside the app container:
+   `python -m app.application.backup <table>` / `python -m app.application.restore <table>`.
+2. **`POST /admin/backup/{table}`** and **`POST /admin/restore/{table}`**, for the
+   Streamlit "Backup & Restore" tab. `table` is one of `departments`, `jobs`, `employees`,
+   `employee_versions`, `loads`, `rejected_records`.
+
+`POST /admin/backup/{table}` takes no body and returns:
+
+```json
+{ "table": "departments", "path": "data/departments.avro" }
+```
+
+`POST /admin/restore/{table}` takes no body, reads `data/<table>.avro`, and returns:
+
+```json
+{ "table": "departments", "restored": 12 }
+```
+
+Status codes for both: **200** on success; **404** with `code: "UNKNOWN_TABLE"` for a table
+name outside the six above; **404** with `code: "BACKUP_NOT_FOUND"` (restore only) when
+`data/<table>.avro` doesn't exist; **500** for a restore that violates a foreign key because
+its dependencies (e.g. `departments`/`jobs` for `employees`) haven't been restored yet — see
+`BACKUP_RESTORE.md`'s reference order.
+
+**These endpoints have no authentication** — this project has no user/role access control at
+all (see `ROADMAP.md`'s out-of-scope list), and adding one just for `/admin/*` was judged out
+of scope for this phase. `POST /admin/restore/{table}` is a destructive full-replace reachable
+by anyone who can reach the API. A real deployment must restrict `/admin/*` at the
+network/reverse-proxy level (e.g. not exposing it through the public gateway, or gating it by
+IP) — this is an operational requirement, not something the app enforces itself. See
+`DECISIONS.md` for the rationale behind exposing these as HTTP endpoints at all.

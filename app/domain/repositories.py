@@ -29,6 +29,9 @@ class DepartmentRepository(ABC):
     @abstractmethod
     def exists(self, department_id: int) -> bool: ...
 
+    @abstractmethod
+    def truncate(self) -> None: ...
+
 
 class JobRepository(ABC):
     @abstractmethod
@@ -42,6 +45,9 @@ class JobRepository(ABC):
 
     @abstractmethod
     def exists(self, job_id: int) -> bool: ...
+
+    @abstractmethod
+    def truncate(self) -> None: ...
 
 
 class EmployeeRepository(ABC):
@@ -57,6 +63,9 @@ class EmployeeRepository(ABC):
     @abstractmethod
     def list_all(self) -> list[Employee]: ...
 
+    @abstractmethod
+    def truncate(self) -> None: ...
+
 
 class EmployeeVersionRepository(ABC):
     @abstractmethod
@@ -71,6 +80,15 @@ class EmployeeVersionRepository(ABC):
     @abstractmethod
     def close_current(self, employee_id: int, valid_to: datetime) -> None: ...
 
+    @abstractmethod
+    def list_all(self) -> list[EmployeeVersion]: ...
+
+    @abstractmethod
+    def truncate(self) -> None: ...
+
+    @abstractmethod
+    def restore_all(self, versions: list[EmployeeVersion]) -> None: ...
+
 
 class LoadRepository(ABC):
     @abstractmethod
@@ -82,6 +100,15 @@ class LoadRepository(ABC):
     @abstractmethod
     def mark_finished(self, load_id: int, accepted: int, rejected: int) -> Load: ...
 
+    @abstractmethod
+    def list_all(self) -> list[Load]: ...
+
+    @abstractmethod
+    def truncate(self) -> None: ...
+
+    @abstractmethod
+    def restore_all(self, loads: list[Load]) -> None: ...
+
 
 class RejectedRecordRepository(ABC):
     @abstractmethod
@@ -89,6 +116,15 @@ class RejectedRecordRepository(ABC):
 
     @abstractmethod
     def list_for_load(self, load_id: int) -> list[RejectedRecord]: ...
+
+    @abstractmethod
+    def list_all(self) -> list[RejectedRecord]: ...
+
+    @abstractmethod
+    def truncate(self) -> None: ...
+
+    @abstractmethod
+    def restore_all(self, records: list[RejectedRecord]) -> None: ...
 
 
 class ReportRepository(ABC):

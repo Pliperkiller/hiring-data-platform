@@ -77,3 +77,13 @@ def test_readding_same_employee_id_raises_integrity_error(db_session: Session) -
 
     with pytest.raises(IntegrityError):
         repo.add(make_employee(name_at_hire="Alice Again"))
+
+
+def test_truncate_removes_all_rows(db_session: Session) -> None:
+    seed_department_and_job(db_session)
+    repo = SqlAlchemyEmployeeRepository(db_session)
+    repo.add(make_employee())
+
+    repo.truncate()
+
+    assert repo.list_all() == []

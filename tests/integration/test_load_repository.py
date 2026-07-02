@@ -39,3 +39,36 @@ def test_mark_finished_updates_counts_and_finished_at(db_session: Session) -> No
 def test_get_missing_returns_none(db_session: Session) -> None:
     repo = SqlAlchemyLoadRepository(db_session)
     assert repo.get(999) is None
+
+
+def test_list_all_returns_all_loads(db_session: Session) -> None:
+    repo = SqlAlchemyLoadRepository(db_session)
+    repo.create(Load(source="historical"))
+    repo.create(Load(source="api:departments"))
+
+    assert [load.source for load in repo.list_all()] == ["historical", "api:departments"]
+
+
+def test_truncate_removes_all_rows(db_session: Session) -> None:
+    repo = SqlAlchemyLoadRepository(db_session)
+    repo.create(Load(source="historical"))
+
+    repo.truncate()
+
+    assert repo.list_all() == []
+
+
+def test_restore_all_preserves_id_and_resyncs_sequence(db_session: Session) -> None:
+    repo = SqlAlchemyLoadRepository(db_session)
+    created = repo.create(Load(source="historical"))
+    assert created.id is not None
+    repo.truncate()
+
+    repo.restore_all([created])
+
+    assert [load.id for load in repo.list_all()] == [created.id]
+
+    # Sequence resync: a normal create() after restore must not collide with the restored id.
+    next_created = repo.create(Load(source="api:departments"))
+    assert next_created.id is not None
+    assert next_created.id > created.id

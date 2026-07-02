@@ -219,7 +219,46 @@ summing to 1643 (total valid 2021 hires); report 2 yields 7 departments above th
   inside the file, so backups are self-describing.
 - **Restore = full replace** (truncate + insert), leaving the table identical to the backup,
   never merging. Restore respects reference order (catalogs first).
-- **Backup/restore are admin commands, not public endpoints.** Restore is destructive.
+- **AVRO schemas are Python dict literals, not `.avsc` files** (`app/infrastructure/avro/
+  schemas.py`). They mirror the SQLAlchemy models the way the models already mirror
+  `DATA_MODEL.md` — code, not an external schema file — and this project only uses external
+  files (`sql/*.sql`) where there's no natural Python representation, which doesn't apply
+  here. A dict literal is also what `fastavro.writer`/`reader` accept directly, with no
+  file-loading indirection, and gets real mypy/ruff coverage that a `.avsc` file would not.
+- **Backup and restore CLIs are strictly single-table**, matching `python -m
+  app.application.backup/restore <table>` — no "all tables" mode. An operator backs up or
+  restores everything by invoking the command six times in the documented order.
+- **`TRUNCATE TABLE <name> CASCADE`, uniformly on all six tables.** Because restore is
+  single-table per invocation, an operator can legally restore `departments` alone while
+  `employees` still references old rows; a plain `TRUNCATE` would fail with a foreign-key
+  error. `CASCADE` is what makes the single-table contract work in isolation for every table,
+  not just a convenience for the ones that structurally need it.
+- **Identity-PK tables (`employee_versions`, `loads`, `rejected_records`) restore via raw
+  `OVERRIDING SYSTEM VALUE` inserts plus an explicit sequence resync.** Verified empirically:
+  SQLAlchemy's Postgres dialect never emits `OVERRIDING SYSTEM VALUE` itself — both ORM and
+  Core inserts raise `psycopg.errors.GeneratedAlways` when given an explicit id against a
+  `GENERATED ALWAYS AS IDENTITY` column. A raw `text()` executemany `INSERT ... OVERRIDING
+  SYSTEM VALUE` is the fix, added as a `restore_all()` method per repository. This alone
+  leaves the underlying sequence un-advanced, so every identity-table restore ends with
+  `setval(pg_get_serial_sequence(...), MAX(id)+1, false)` to prevent a subsequent normal
+  insert from colliding with a restored id. The other three tables (natural business-key
+  PKs) restore through their existing `upsert()`/`add()` methods unchanged.
+- **Backup/restore are exposed via `POST /admin/backup/{table}` and `POST
+  /admin/restore/{table}`, reversing the earlier "not HTTP endpoints" decision above.** The
+  Streamlit UI gained a "Backup & Restore" tab so an operator can trigger these without a
+  shell into the app container; the admin endpoints and the CLI call the identical `Backup`/
+  `Restore` use cases, so there is exactly one implementation either way. This is a
+  deliberate trade-off, not an oversight: this project has no user/role access control
+  anywhere (`ROADMAP.md`'s out-of-scope list), so `/admin/*` has no authentication of its
+  own, and `POST /admin/restore/{table}` is destructive and reachable by anyone who can reach
+  the API. The Streamlit tab requires a per-table confirmation checkbox before enabling its
+  restore button as a UI-level safeguard, but the real mitigation has to be operational: a
+  production deployment must restrict `/admin/*` at the network/reverse-proxy level (not
+  exposed through the public gateway, or IP-gated), which is outside this repo's scope.
+- **`data/` backup files are not bind-mounted from the app container to the host.** Deferred
+  as an operations follow-up; a durable volume mount is a one-line `docker-compose.yml`
+  change but is out of this phase's scope (implementing correct commands, not deployment
+  durability).
 
 ## Miscellaneous
 

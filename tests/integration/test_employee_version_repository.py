@@ -93,3 +93,45 @@ def test_second_open_version_without_closing_raises_integrity_error(
 
     with pytest.raises(IntegrityError):
         repo.add(make_version(name="Alice B", valid_from=datetime(2021, 6, 1, tzinfo=UTC)))
+
+
+def test_list_all_returns_all_versions(db_session: Session) -> None:
+    seed_employee(db_session)
+    repo = SqlAlchemyEmployeeVersionRepository(db_session)
+    repo.add(make_version())
+    repo.close_current(1, datetime(2021, 6, 1, tzinfo=UTC))
+    repo.add(make_version(name="Alice B", valid_from=datetime(2021, 6, 1, tzinfo=UTC)))
+
+    assert [v.name for v in repo.list_all()] == ["Alice", "Alice B"]
+
+
+def test_truncate_removes_all_rows(db_session: Session) -> None:
+    seed_employee(db_session)
+    repo = SqlAlchemyEmployeeVersionRepository(db_session)
+    repo.add(make_version())
+
+    repo.truncate()
+
+    assert repo.list_all() == []
+
+
+def test_restore_all_preserves_version_id_and_resyncs_sequence(db_session: Session) -> None:
+    seed_employee(db_session)
+    repo = SqlAlchemyEmployeeVersionRepository(db_session)
+    added = repo.add(make_version())
+    assert added.version_id is not None
+    repo.truncate()
+
+    repo.restore_all([added])
+
+    assert [v.version_id for v in repo.list_all()] == [added.version_id]
+
+    # Sequence resync: a normal add() after restore must not collide with the restored id.
+    # Close the restored (is_current=True) row first — the partial unique index only allows
+    # one current row per employee, and this check is only about the id sequence, not SCD.
+    repo.close_current(1, datetime(2021, 6, 1, tzinfo=UTC))
+    next_added = repo.add(
+        make_version(name="Alice B", valid_from=datetime(2021, 6, 1, tzinfo=UTC))
+    )
+    assert next_added.version_id is not None
+    assert next_added.version_id > added.version_id

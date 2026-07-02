@@ -88,6 +88,7 @@ app/
     value_objects.py    # HireDatetime, ReasonCode, ...
     validation.py       # validation domain service
     repositories.py     # repository interfaces (ABCs)
+    backup_codec.py     # BackupCodec ABC + TABLE_NAMES/validate_table_name
   application/        # use cases orchestrating domain + repos
     ingest_batch.py
     generate_report.py
@@ -101,10 +102,16 @@ app/
       migrations/       # Alembic
       repositories.py   # concrete implementations
     avro/               # backup / restore in AVRO
+      avro_backup_codec.py  # concrete BackupCodec, wraps codec.py's write_avro/read_avro
     config.py
     logging_config.py   # one-shot root logger config, called once at API startup
   interface/
     ingest_constants.py  # MAX_BATCH_SIZE shared by api/schemas.py and ui/historical_load.py
+    composition.py       # composition root: wires SqlAlchemy* repos + AvroBackupCodec into
+                          # Backup/Restore, used by both the admin router and cli/
+    cli/
+      backup.py           # `python -m app.interface.cli.backup <table>`
+      restore.py          # `python -m app.interface.cli.restore <table>`
     api/
       main.py           # FastAPI app
       routers/          # ingest.py, reports.py, admin.py

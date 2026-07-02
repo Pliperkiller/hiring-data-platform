@@ -61,8 +61,8 @@ The same use cases the Admin tab calls over HTTP are also available as CLI comma
 direct operator use inside the app container:
 
 ```bash
-docker compose exec app python -m app.application.backup <table>
-docker compose exec app python -m app.application.restore <table>
+docker compose exec app python -m app.interface.cli.backup <table>
+docker compose exec app python -m app.interface.cli.restore <table>
 ```
 
 `<table>` is one of `departments`, `jobs`, `employees`, `employee_versions`, `loads`,

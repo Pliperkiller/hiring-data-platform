@@ -24,11 +24,38 @@ data; a few were product decisions from requirements.
 - **Field-level reason.** Each rejected record names the field that failed plus a reason
   code, so whoever fixes the data knows exactly what to correct.
 - **Strict everywhere the data allows it for free.** The source data has no type coercion
-  cases, no bad datetimes, no 0/negative/duplicate ids. So we take the strict stance (exact
-  ISO 8601 with `Z`, integer ids, etc.) at no cost, because no legitimate row is affected.
+  cases, no bad datetimes, and no duplicate ids; ids are all positive. So we take the strict
+  stance (exact ISO 8601 with `Z`, integer ids, etc.) at no cost, because no legitimate row is
+  affected.
 - **Partial success, per row.** A batch with some invalid rows inserts the valid ones and
   rejects the rest; one bad row does not sink the batch. (70 of 1999 rows are invalid, spread
   out, so atomic rejection would be wrong.)
+- **`ReasonCode` is a `StrEnum`.** Chosen over frozen-dataclass sentinel constants because a
+  `StrEnum` member is simultaneously a `str` — it drops into `rejected_records.reason_code
+  TEXT` and JSON responses with no adapter code — while still being closed and exhaustive (a
+  new code requires a deliberate enum edit, not just any string).
+- **Wrong-typed id/FK values collapse into the existing `MISSING_*` code, not a new code.** A
+  string-digit id (`"5"`), a `bool` id, or a non-integer `department_id`/`job_id` are treated
+  identically to an absent value — the catalog's own meaning column ("id empty or not an
+  integer") already covers this, and inventing a new code would break the closed catalog.
+  FK-existence checks (`UNKNOWN_DEPARTMENT`/`UNKNOWN_JOB`) only run once the type check passes.
+  Positivity is deliberately **not** checked: `0` and negative ints pass, since the catalog's
+  meaning column has no positivity clause and the DDL has no `CHECK` constraint for it.
+  Duplicate ids are also out of scope for field-level validation — detecting one needs
+  cross-row/DB state (`EmployeeRepository.exists()`), which belongs to Phase 3's SCD-transition
+  logic, not a single row validated in isolation.
+- **Whitespace-only strings count as empty for `MISSING_NAME`.** `"   "` fails the same way as
+  `""` or a missing key — decorative whitespace isn't a legitimate name.
+- **Validation aggregates every field-level defect per row; no fail-fast.** A row can fail more
+  than one field simultaneously (e.g. an unknown department and an unknown job at once); the
+  validation service collects every `FieldError` before returning, rather than stopping at the
+  first one. `rejected_records` stores one `field`/`reason_code` per row, so a multi-defect row
+  may become more than one `rejected_records` row for the same `raw_payload` — that split is
+  Phase 3's concern, not this domain service's.
+- **No generic `Result[T, E]` wrapper for validation outcomes.** The validation service returns
+  plain unions (e.g. `Department | ValidationFailure`), discriminated by `isinstance` — no
+  Result/Either library is a dependency, and there is no second consumer that would justify a
+  hand-rolled generic wrapper.
 
 ## Ingestion
 

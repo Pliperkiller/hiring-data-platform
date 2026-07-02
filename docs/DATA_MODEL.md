@@ -167,11 +167,18 @@ Stored in `rejected_records.reason_code`. `field` names the offending column.
 | `MISSING_ID` | id | id empty or not an integer |
 | `MISSING_NAME` | name / department / job | name column empty |
 | `MISSING_DATETIME` | datetime | hire datetime empty |
-| `MISSING_DEPARTMENT` | department_id | department_id empty |
-| `MISSING_JOB` | job_id | job_id empty |
+| `MISSING_DEPARTMENT` | department_id | department_id empty or not an integer |
+| `MISSING_JOB` | job_id | job_id empty or not an integer |
 | `BAD_DATETIME_FORMAT` | datetime | not ISO 8601 with `Z` |
 | `UNKNOWN_DEPARTMENT` | department_id | department_id not in `departments` |
 | `UNKNOWN_JOB` | job_id | job_id not in `jobs` |
+
+`MISSING_ID`/`MISSING_DEPARTMENT`/`MISSING_JOB` deliberately fire for both an absent value and
+a wrong-typed one (e.g. a string-digit id, or a boolean) — a closed catalog, so wrong-typed
+values collapse into the existing code rather than getting a code of their own. They check
+presence and type only, not sign: `0` and negative ints pass, since the meaning column above
+has no positivity clause. FK-existence checks (`UNKNOWN_DEPARTMENT`/`UNKNOWN_JOB`) only run
+once the corresponding id passes its type check.
 
 A batch larger than 1000 rows is rejected at the request level with HTTP 422 and is **not**
 written to `rejected_records` (it never becomes rows). In the current source data only the

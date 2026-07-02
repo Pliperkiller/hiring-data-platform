@@ -7,6 +7,7 @@ phase adds, plus call tracking so tests can assert truncate-before-insert orderi
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
@@ -87,6 +88,12 @@ class FakeEmployeeRepository(EmployeeRepository):
 
     def list_all(self) -> list[Employee]:
         return list(self._by_id.values())
+
+    def update_current(self, employee_id: int, name: str, department_id: int, job_id: int) -> None:
+        current = self._by_id[employee_id]
+        self._by_id[employee_id] = replace(
+            current, name=name, department_id=department_id, job_id=job_id
+        )
 
     def truncate(self) -> None:
         self.truncate_called = True

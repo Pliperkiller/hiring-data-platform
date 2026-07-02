@@ -37,6 +37,9 @@ def make_backup(tmp_path: Path) -> Backup:
                     hire_datetime=UTC_NOW,
                     hire_department_id=1,
                     hire_job_id=5,
+                    name="Ada",
+                    department_id=1,
+                    job_id=5,
                     first_loaded_at=UTC_NOW,
                 )
             }

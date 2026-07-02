@@ -27,6 +27,9 @@ def make_employee(**overrides: object) -> Employee:
         "hire_datetime": datetime(2021, 3, 15, tzinfo=UTC),
         "hire_department_id": 1,
         "hire_job_id": 1,
+        "name": "Alice",
+        "department_id": 1,
+        "job_id": 1,
     }
     defaults.update(overrides)
     return Employee(**defaults)  # type: ignore[arg-type]
@@ -87,3 +90,30 @@ def test_truncate_removes_all_rows(db_session: Session) -> None:
     repo.truncate()
 
     assert repo.list_all() == []
+
+
+def test_update_current_changes_current_fields_but_not_hire_facts(db_session: Session) -> None:
+    seed_department_and_job(db_session)
+    SqlAlchemyDepartmentRepository(db_session).upsert(Department(id=2, name="Sales"))
+    SqlAlchemyJobRepository(db_session).upsert(Job(id=2, name="VP Sales"))
+    repo = SqlAlchemyEmployeeRepository(db_session)
+    repo.add(make_employee())
+
+    repo.update_current(1, name="Alice B.", department_id=2, job_id=2)
+
+    updated = repo.get(1)
+    assert updated is not None
+    assert updated.name == "Alice B."
+    assert updated.department_id == 2
+    assert updated.job_id == 2
+    # Hire facts are immutable: unaffected by update_current.
+    assert updated.name_at_hire == "Alice"
+    assert updated.hire_department_id == 1
+    assert updated.hire_job_id == 1
+
+
+def test_update_current_missing_employee_raises(db_session: Session) -> None:
+    repo = SqlAlchemyEmployeeRepository(db_session)
+
+    with pytest.raises(ValueError, match="999"):
+        repo.update_current(999, name="Ghost", department_id=1, job_id=1)

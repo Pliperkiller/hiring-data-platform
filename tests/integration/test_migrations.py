@@ -32,8 +32,9 @@ def test_report_materialized_views_refresh_after_data_loaded(db_session: Session
     db_session.execute(
         text(
             "INSERT INTO employees "
-            "(employee_id, name_at_hire, hire_datetime, hire_department_id, hire_job_id) "
-            "VALUES (1, 'Alice', :hire_datetime, 1, 1)"
+            "(employee_id, name_at_hire, hire_datetime, hire_department_id, hire_job_id, "
+            "name, department_id, job_id) "
+            "VALUES (1, 'Alice', :hire_datetime, 1, 1, 'Alice', 1, 1)"
         ),
         {"hire_datetime": datetime(2021, 3, 15, tzinfo=UTC)},
     )
@@ -54,8 +55,9 @@ def test_employee_versions_partial_unique_index_enforced(db_session: Session) ->
     db_session.execute(
         text(
             "INSERT INTO employees "
-            "(employee_id, name_at_hire, hire_datetime, hire_department_id, hire_job_id) "
-            "VALUES (1, 'Alice', :hire_datetime, 1, 1)"
+            "(employee_id, name_at_hire, hire_datetime, hire_department_id, hire_job_id, "
+            "name, department_id, job_id) "
+            "VALUES (1, 'Alice', :hire_datetime, 1, 1, 'Alice', 1, 1)"
         ),
         {"hire_datetime": datetime(2021, 3, 15, tzinfo=UTC)},
     )

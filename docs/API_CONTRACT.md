@@ -14,6 +14,7 @@ response bodies are JSON.
 | GET | `/reports/hires-by-quarter` | report 1 (2021) |
 | GET | `/reports/departments-above-average` | report 2 (2021) |
 | POST | `/admin/backup/{table}` | back up one table to `data/<table>.avro` |
+| GET | `/admin/backup/{table}` | download the existing `data/<table>.avro` |
 | POST | `/admin/restore/{table}` | full-replace restore one table from `data/<table>.avro` |
 | POST | `/admin/reset` | truncate all six tables and refresh the report views |
 | GET | `/health` | liveness check |
@@ -151,6 +152,15 @@ name outside the six above; **404** with `code: "BACKUP_NOT_FOUND"` (restore onl
 `data/<table>.avro` doesn't exist; **500** for a restore that violates a foreign key because
 its dependencies (e.g. `departments`/`jobs` for `employees`) haven't been restored yet — see
 `BACKUP_RESTORE.md`'s reference order.
+
+**`GET /admin/backup/{table}`** downloads the existing `data/<table>.avro` as an
+`application/octet-stream` attachment (`Content-Disposition: attachment;
+filename="<table>.avro"`). It is a read, not an action: it never creates or refreshes the
+backup file — call `POST /admin/backup/{table}` first. Status codes: **200** with the file
+body on success; **404** `UNKNOWN_TABLE` / **404** `BACKUP_NOT_FOUND` under the same
+conditions as restore. The Streamlit Admin tab calls this right after a successful backup to
+offer a "Download `<table>`.avro" button, so an operator can retrieve the file without shell
+access to the app container.
 
 ## Reset
 

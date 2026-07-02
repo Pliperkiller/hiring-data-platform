@@ -13,7 +13,13 @@ config = context.config
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers=False: fileConfig's default (True) disables every logger
+    # created before this call that isn't listed in alembic.ini. In production this runs in
+    # its own process (docker-entrypoint.sh, before uvicorn starts) so it's harmless, but the
+    # test suite runs migrations in-process via the apply_migrations fixture — without this,
+    # it would silently disable app.* loggers (e.g. app.application.ingest_batch) for the rest
+    # of the test session.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # The DB URL is sourced from Settings (DATABASE_URL env var), not alembic.ini,
 # so the same config works in CI, local dev, and on the droplet.

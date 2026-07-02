@@ -36,7 +36,7 @@ flowchart TD
     end
 
     API --> VAL
-    HIST --> VAL
+    HIST --> API
     VAL -->|valid| SCD
     VAL -->|invalid| REJ
     REF -.->|FK check| VAL

@@ -73,6 +73,40 @@ data; a few were product decisions from requirements.
   1000s, and POSTs to the existing endpoints in dependency order. (The challenge document
   leaves the historical-load strategy open, so this is a choice, not a requirement. For the
   production vision a separate bulk job, Option A, would be preferred.)
+- **`IngestBatch` is one class with three thin methods, not three classes.** The "one endpoint
+  per table" decision above is scoped to routes/schemas ("each table has a distinct schema");
+  the three tables share all the batch-orchestration machinery (one `Load` per call, `row_index`
+  tracking, fanning a `ValidationFailure` into `RejectedRecord` rows, `mark_finished`, the single
+  commit). Only "how to persist one valid row" differs per table (upsert vs. SCD decide-and-
+  execute), so it factors into a small per-table callback into one shared batch loop instead of
+  triplicating the shared machinery across three classes.
+- **One `session.commit()` per batch, at the end.** Repositories `flush()` only (see below);
+  `IngestBatch` owns the transaction boundary and commits once after all rows are processed and
+  `Load.mark_finished` is called. Rows are capped at 1000 and ingestion is synchronous with no
+  queues, so one transaction per batch is well within Postgres's comfort zone, and it keeps the
+  `Load`'s final counts, every persisted row, and every `RejectedRecord` atomically visible
+  together. An unhandled infrastructure error mid-batch is not caught locally — it propagates to
+  a 500 and the whole batch rolls back, so a 500 response never coexists with partial writes a
+  client was told didn't happen.
+- **`rejected` in the ingestion response counts rows, not field-errors.** A row with two
+  simultaneous defects (e.g. unknown department and unknown job) contributes 1 to `rejected` but
+  2 entries to `rejected_rows`, both sharing that row's `row_index`. `API_CONTRACT.md`'s
+  worked example doesn't disambiguate this directly, but "accepted + rejected = rows submitted"
+  and the row-level language throughout the contract ("invalid rows are not [persisted]") both
+  point to row-counting; the earlier "that split is Phase 3's concern" note in the Validation
+  section is resolved here.
+- **Materialized-view refresh is out of scope for Phase 3.** `DATA_MODEL.md` says to "refresh
+  both [report views] at the end of each ingestion load," but the views themselves don't exist
+  until Phase 5 (`feature/reports`) creates them. `IngestBatch` in this phase does not call,
+  stub, or guard a refresh — no speculative plumbing for a feature two phases away. Phase 5
+  wires the refresh into `IngestBatch` once the views exist, as a small follow-up change to this
+  same use case.
+- **`BATCH_TOO_LARGE` is a distinct error code**, detected from the Pydantic length-violation
+  error on the batch body (a `too_long`/`too_short` error type on the list field) and returned
+  as `code: "BATCH_TOO_LARGE"` with `detail: {"received": N, "max"/"min": ...}`, matching
+  `API_CONTRACT.md`'s worked example and its own dedicated row in the status-code table for
+  "a batch with 0 or more than 1000 rows." Every other malformed-request 422 (wrong envelope
+  shape, non-object array elements) stays the generic `code: "VALIDATION_ERROR"`.
 
 ## History (SCD Type 2)
 

@@ -2,13 +2,15 @@
 
 Validation-rule ownership (required fields, ISO 8601 parsing, FK existence) belongs to
 feature/validation. SCD transition orchestration (deciding when to open/close a version)
-belongs to feature/ingestion-api. This module only holds the shapes and pure predicates.
+belongs to feature/ingestion-api: decide_scd_action() is the pure decision, applied by
+app/application/ingest_batch.py.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum, auto
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,3 +45,44 @@ class Employee:
     hire_department_id: int
     hire_job_id: int
     first_loaded_at: datetime | None = None
+
+
+class ScdAction(Enum):
+    """The three possible outcomes of ingesting one validated hire row."""
+
+    NEW_EMPLOYEE = auto()
+    NEW_VERSION = auto()
+    NO_OP = auto()
+
+
+@dataclass(frozen=True, slots=True)
+class ScdDecision:
+    """Pure outcome of comparing a validated hire against current state.
+
+    current_version is only populated for NEW_VERSION (the version being closed) — the caller
+    already has it and can close-then-open without a second repo round trip.
+    """
+
+    action: ScdAction
+    current_version: EmployeeVersion | None = None
+
+
+def decide_scd_action(
+    employee_exists: bool,
+    current_version: EmployeeVersion | None,
+    name: str,
+    department_id: int,
+    job_id: int,
+) -> ScdDecision:
+    """Pure SCD Type 2 decision: no I/O, no repos, no datetime.now().
+
+    Takes the values the caller already fetched, rather than repos, so this stays testable
+    without fakes/mocks. The caller (IngestBatch) fetches employee_exists/current_version and
+    executes the decision (assigning valid_from/valid_to/now()) against the repos.
+    """
+    if not employee_exists:
+        return ScdDecision(action=ScdAction.NEW_EMPLOYEE)
+    assert current_version is not None, "existing employee must have a current version"
+    if current_version.has_changed(name, department_id, job_id):
+        return ScdDecision(action=ScdAction.NEW_VERSION, current_version=current_version)
+    return ScdDecision(action=ScdAction.NO_OP)

@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.domain.employee import Employee, EmployeeVersion
+from app.domain.employee import Employee, EmployeeVersion, ScdAction, decide_scd_action
 
 
 def make_employee(**overrides: object) -> Employee:
@@ -84,3 +84,54 @@ def test_version_is_immutable() -> None:
     version = make_version()
     with pytest.raises(FrozenInstanceError):
         version.is_current = False  # type: ignore[misc]
+
+
+def test_decide_scd_action_new_employee() -> None:
+    decision = decide_scd_action(
+        employee_exists=False, current_version=None, name="Alice", department_id=10, job_id=20
+    )
+    assert decision.action is ScdAction.NEW_EMPLOYEE
+    assert decision.current_version is None
+
+
+def test_decide_scd_action_no_op_on_identical_attributes() -> None:
+    version = make_version()
+    decision = decide_scd_action(
+        employee_exists=True,
+        current_version=version,
+        name="Alice",
+        department_id=10,
+        job_id=20,
+    )
+    assert decision.action is ScdAction.NO_OP
+    assert decision.current_version is None
+
+
+@pytest.mark.parametrize(
+    ("name", "department_id", "job_id"),
+    [
+        ("Bob", 10, 20),
+        ("Alice", 99, 20),
+        ("Alice", 10, 99),
+    ],
+)
+def test_decide_scd_action_new_version_on_attribute_change(
+    name: str, department_id: int, job_id: int
+) -> None:
+    version = make_version()
+    decision = decide_scd_action(
+        employee_exists=True,
+        current_version=version,
+        name=name,
+        department_id=department_id,
+        job_id=job_id,
+    )
+    assert decision.action is ScdAction.NEW_VERSION
+    assert decision.current_version is version
+
+
+def test_decide_scd_action_asserts_current_version_present_when_employee_exists() -> None:
+    with pytest.raises(AssertionError):
+        decide_scd_action(
+            employee_exists=True, current_version=None, name="Alice", department_id=10, job_id=20
+        )

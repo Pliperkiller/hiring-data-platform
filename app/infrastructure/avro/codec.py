@@ -69,6 +69,9 @@ def employee_to_avro_dict(employee: Employee) -> dict[str, Any]:
         "hire_datetime": employee.hire_datetime,
         "hire_department_id": employee.hire_department_id,
         "hire_job_id": employee.hire_job_id,
+        "name": employee.name,
+        "department_id": employee.department_id,
+        "job_id": employee.job_id,
         "first_loaded_at": employee.first_loaded_at,
     }
 
@@ -80,6 +83,9 @@ def avro_dict_to_employee(row: dict[str, Any]) -> Employee:
         hire_datetime=row["hire_datetime"],
         hire_department_id=row["hire_department_id"],
         hire_job_id=row["hire_job_id"],
+        name=row["name"],
+        department_id=row["department_id"],
+        job_id=row["job_id"],
         first_loaded_at=row["first_loaded_at"],
     )
 

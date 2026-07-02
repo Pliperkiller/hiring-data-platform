@@ -192,6 +192,9 @@ class IngestBatch:
                     hire_datetime=hire.hire_datetime.value,
                     hire_department_id=hire.department_id,
                     hire_job_id=hire.job_id,
+                    name=hire.name,
+                    department_id=hire.department_id,
+                    job_id=hire.job_id,
                 )
             )
             self._employee_version_repo.add(
@@ -218,6 +221,12 @@ class IngestBatch:
                     valid_to=None,
                     is_current=True,
                 )
+            )
+            # Keep employees' current name/department/job in sync with the new version, so a
+            # caller can read "what is this employee's status right now" without a join — the
+            # hire_* fields above are untouched, preserving hire-time report attribution.
+            self._employee_repo.update_current(
+                hire.id, name=hire.name, department_id=hire.department_id, job_id=hire.job_id
             )
         # ScdAction.NO_OP: nothing to do — identical re-upload.
 

@@ -3,13 +3,14 @@ from dataclasses import FrozenInstanceError
 import pytest
 
 from app.domain.rejected_record import Load, RejectedRecord
+from app.domain.value_objects import ReasonCode
 
 
 def test_rejected_record_required_fields_only() -> None:
     record = RejectedRecord(
         target_table="hired_employees",
         raw_payload={"id": "", "name": "Alice"},
-        reason_code="MISSING_ID",
+        reason_code=ReasonCode.MISSING_ID,
         message="id is empty",
     )
     assert record.field is None
@@ -22,7 +23,7 @@ def test_rejected_record_with_optional_fields() -> None:
     record = RejectedRecord(
         target_table="hired_employees",
         raw_payload={"id": "1"},
-        reason_code="MISSING_NAME",
+        reason_code=ReasonCode.MISSING_NAME,
         message="name is empty",
         field="name",
         load_id=42,
@@ -35,7 +36,7 @@ def test_rejected_record_is_immutable() -> None:
     record = RejectedRecord(
         target_table="departments",
         raw_payload={},
-        reason_code="MISSING_NAME",
+        reason_code=ReasonCode.MISSING_NAME,
         message="name is empty",
     )
     with pytest.raises(FrozenInstanceError):

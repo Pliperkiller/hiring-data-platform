@@ -76,6 +76,9 @@ def seed_full_dataset(session: Session) -> None:
             hire_datetime=UTC_NOW,
             hire_department_id=1,
             hire_job_id=1,
+            name="Alice",
+            department_id=1,
+            job_id=1,
         )
     )
     SqlAlchemyEmployeeVersionRepository(session).add(

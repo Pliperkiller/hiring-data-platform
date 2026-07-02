@@ -38,6 +38,9 @@ EMPLOYEE_SCHEMA = {
         {"name": "hire_datetime", "type": _TIMESTAMP_MILLIS},
         {"name": "hire_department_id", "type": "long"},
         {"name": "hire_job_id", "type": "long"},
+        {"name": "name", "type": "string"},
+        {"name": "department_id", "type": "long"},
+        {"name": "job_id", "type": "long"},
         {"name": "first_loaded_at", "type": _TIMESTAMP_MILLIS},
     ],
 }

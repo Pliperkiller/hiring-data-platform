@@ -115,6 +115,9 @@ def test_reset_empties_all_tables_and_refreshes_report_views(
             hire_datetime=datetime(2021, 2, 10, 9, 30, tzinfo=UTC),
             hire_department_id=1,
             hire_job_id=5,
+            name="Ada Lovelace",
+            department_id=1,
+            job_id=5,
         )
     )
     db_session.commit()

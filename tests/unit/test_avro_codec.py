@@ -65,6 +65,9 @@ def test_write_then_read_employees_round_trips(tmp_path: Path) -> None:
         hire_datetime=UTC_NOW,
         hire_department_id=1,
         hire_job_id=5,
+        name="Ada Lovelace",
+        department_id=2,
+        job_id=41,
         first_loaded_at=UTC_NOW,
     )
     path = tmp_path / "employees.avro"

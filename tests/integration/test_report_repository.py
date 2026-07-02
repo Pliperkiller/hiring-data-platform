@@ -26,6 +26,9 @@ def make_employee(employee_id: int, **overrides: object) -> Employee:
         "hire_datetime": datetime(2021, 1, 1, tzinfo=UTC),
         "hire_department_id": 1,
         "hire_job_id": 1,
+        "name": f"Employee {employee_id}",
+        "department_id": 1,
+        "job_id": 1,
     }
     defaults.update(overrides)
     return Employee(**defaults)  # type: ignore[arg-type]

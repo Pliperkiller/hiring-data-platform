@@ -26,6 +26,9 @@ def seed_employee(session: Session, employee_id: int = 1) -> None:
             hire_datetime=datetime(2021, 3, 15, tzinfo=UTC),
             hire_department_id=1,
             hire_job_id=1,
+            name="Alice",
+            department_id=1,
+            job_id=1,
         )
     )
 

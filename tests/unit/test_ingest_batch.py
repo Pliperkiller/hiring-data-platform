@@ -67,6 +67,7 @@ class FakeEmployeeRepository(EmployeeRepository):
     def __init__(self) -> None:
         self._by_id: dict[int, Employee] = {}
         self.add_calls: list[Employee] = []
+        self.update_current_calls: list[tuple[int, str, int, int]] = []
 
     def add(self, employee: Employee) -> Employee:
         self._by_id[employee.employee_id] = employee
@@ -81,6 +82,13 @@ class FakeEmployeeRepository(EmployeeRepository):
 
     def list_all(self) -> list[Employee]:
         return list(self._by_id.values())
+
+    def update_current(self, employee_id: int, name: str, department_id: int, job_id: int) -> None:
+        self.update_current_calls.append((employee_id, name, department_id, job_id))
+        current = self._by_id[employee_id]
+        self._by_id[employee_id] = replace(
+            current, name=name, department_id=department_id, job_id=job_id
+        )
 
     def truncate(self) -> None:
         self._by_id.clear()
@@ -322,6 +330,9 @@ def make_existing_hire(
         hire_datetime=hire_datetime,
         hire_department_id=department_id,
         hire_job_id=job_id,
+        name=name,
+        department_id=department_id,
+        job_id=job_id,
     )
     version = EmployeeVersion(
         employee_id=employee_id,
@@ -432,6 +443,8 @@ def test_ingest_hires_identical_reupload_is_noop() -> None:
     assert harness.employee_version_repo.close_current_calls == []
     assert len(harness.employee_repo.add_calls) == 1
     assert len(harness.employee_version_repo.list_for_employee(101)) == 1
+    # No-op: employees' current fields are untouched.
+    assert harness.employee_repo.update_current_calls == []
 
 
 def test_ingest_hires_changed_reupload_closes_and_opens_version() -> None:
@@ -455,11 +468,13 @@ def test_ingest_hires_changed_reupload_closes_and_opens_version() -> None:
     assert old_version.valid_to is not None
     assert new_version.department_id == 2
     assert new_version.valid_to is None
-    # Hire facts are immutable: the employees row is never touched on a re-upload.
+    assert harness.employee_repo.update_current_calls == [(101, "Ada Lovelace", 2, 5)]
+    # Hire facts stay immutable, but the employees row's current fields do update.
     stored_employee = harness.employee_repo.get(101)
     assert stored_employee is not None
     assert stored_employee.hire_department_id == 1
     assert stored_employee.hire_datetime == employee.hire_datetime
+    assert stored_employee.department_id == 2
     assert len(harness.employee_repo.add_calls) == 1
 
 
@@ -475,6 +490,10 @@ def test_ingest_hires_duplicate_id_within_one_batch_new_then_changed() -> None:
     versions = harness.employee_version_repo.list_for_employee(101)
     assert len(versions) == 2
     assert len(harness.employee_repo.add_calls) == 1
+    stored_employee = harness.employee_repo.get(101)
+    assert stored_employee is not None
+    assert stored_employee.hire_department_id == 1
+    assert stored_employee.department_id == 2
 
 
 def test_ingest_hires_duplicate_id_within_one_batch_identical_twice() -> None:

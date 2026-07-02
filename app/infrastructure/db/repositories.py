@@ -110,6 +110,9 @@ class SqlAlchemyEmployeeRepository(EmployeeRepository):
             hire_datetime=employee.hire_datetime,
             hire_department_id=employee.hire_department_id,
             hire_job_id=employee.hire_job_id,
+            name=employee.name,
+            department_id=employee.department_id,
+            job_id=employee.job_id,
         )
         self._session.add(model)
         self._session.flush()
@@ -126,6 +129,15 @@ class SqlAlchemyEmployeeRepository(EmployeeRepository):
         rows = self._session.scalars(select(EmployeeModel).order_by(EmployeeModel.employee_id))
         return [self._to_domain(r) for r in rows]
 
+    def update_current(self, employee_id: int, name: str, department_id: int, job_id: int) -> None:
+        model = self._session.get(EmployeeModel, employee_id)
+        if model is None:
+            raise ValueError(f"Employee {employee_id} not found")
+        model.name = name
+        model.department_id = department_id
+        model.job_id = job_id
+        self._session.flush()
+
     def truncate(self) -> None:
         self._session.execute(text("TRUNCATE TABLE employees CASCADE"))
         self._session.flush()
@@ -138,6 +150,9 @@ class SqlAlchemyEmployeeRepository(EmployeeRepository):
             hire_datetime=model.hire_datetime,
             hire_department_id=model.hire_department_id,
             hire_job_id=model.hire_job_id,
+            name=model.name,
+            department_id=model.department_id,
+            job_id=model.job_id,
             first_loaded_at=model.first_loaded_at,
         )
 

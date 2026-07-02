@@ -27,7 +27,12 @@ class JobModel(Base):
 
 
 class EmployeeModel(Base):
-    """Hire facts: one row per employee, immutable after first load."""
+    """One row per employee: immutable hire facts plus current state.
+
+    name_at_hire/hire_datetime/hire_department_id/hire_job_id are set once, at first load, and
+    never change (reports attribute hires by these). name/department_id/job_id track current
+    state, updated on every SCD version change alongside employee_versions.
+    """
 
     __tablename__ = "employees"
 
@@ -38,6 +43,9 @@ class EmployeeModel(Base):
         ForeignKey("departments.id"), nullable=False
     )
     hire_job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"), nullable=False)
+    name: Mapped[str] = mapped_column(nullable=False)
+    department_id: Mapped[int] = mapped_column(ForeignKey("departments.id"), nullable=False)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"), nullable=False)
     first_loaded_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=func.now()
     )

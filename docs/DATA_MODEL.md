@@ -9,6 +9,8 @@ identifiers are the exact names to use in code.
 erDiagram
     DEPARTMENTS ||--o{ EMPLOYEES : "hire department"
     JOBS ||--o{ EMPLOYEES : "hire job"
+    DEPARTMENTS ||--o{ EMPLOYEES : "current department"
+    JOBS ||--o{ EMPLOYEES : "current job"
     EMPLOYEES ||--o{ EMPLOYEE_VERSIONS : "has versions"
     DEPARTMENTS ||--o{ EMPLOYEE_VERSIONS : "current department"
     JOBS ||--o{ EMPLOYEE_VERSIONS : "current job"
@@ -28,6 +30,9 @@ erDiagram
         timestamptz hire_datetime
         int hire_department_id FK
         int hire_job_id FK
+        text name
+        int department_id FK
+        int job_id FK
         timestamptz first_loaded_at
     }
     EMPLOYEE_VERSIONS {
@@ -75,13 +80,21 @@ CREATE TABLE jobs (
     job  TEXT NOT NULL
 );
 
--- Hire facts: one row per employee, immutable after first load.
+-- One row per employee: immutable hire facts plus current state.
+-- name_at_hire/hire_datetime/hire_department_id/hire_job_id are set once, at first load,
+-- and never change afterward (reports attribute hires by these — see docs/DECISIONS.md).
+-- name/department_id/job_id track CURRENT state, kept in sync with employee_versions'
+-- current row on every SCD transition (added in a Phase 8 revision of the original design,
+-- which held only the hire fact — see docs/DECISIONS.md).
 CREATE TABLE employees (
     employee_id         INTEGER PRIMARY KEY,
     name_at_hire        TEXT NOT NULL,
     hire_datetime       TIMESTAMPTZ NOT NULL,
     hire_department_id  INTEGER NOT NULL REFERENCES departments(id),
     hire_job_id         INTEGER NOT NULL REFERENCES jobs(id),
+    name                TEXT NOT NULL,
+    department_id       INTEGER NOT NULL REFERENCES departments(id),
+    job_id              INTEGER NOT NULL REFERENCES jobs(id),
     first_loaded_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -133,7 +146,9 @@ identity/autoincrement, per the "no surrogate for the business key" decision in
 
 Applied when ingesting a **validated** `hired_employees` row:
 
-1. **Employee does not exist** (`employee_id` not in `employees`): insert the hire facts into
+1. **Employee does not exist** (`employee_id` not in `employees`): insert the hire facts
+   (`name_at_hire`/`hire_datetime`/`hire_department_id`/`hire_job_id`) and the initial current
+   state (`name`/`department_id`/`job_id`, equal to the hire facts at this point) into
    `employees`, and insert the initial row into `employee_versions` with
    `valid_from = hire_datetime`, `valid_to = NULL`, `is_current = true`.
 2. **Employee exists:** compare the tracked attributes (`name`, `department_id`, `job_id`) of
@@ -141,16 +156,23 @@ Applied when ingesting a **validated** `hired_employees` row:
    - **Identical:** no-op (idempotent).
    - **Different:** close the current version (`valid_to = now()`, `is_current = false`) and
      insert a new version with the new values, `valid_from = now()`, `valid_to = NULL`,
-     `is_current = true`. The `employees` hire facts are left unchanged.
+     `is_current = true`. `employees.name`/`department_id`/`job_id` are updated to match this
+     new version in the same step; `employees`' hire facts are left unchanged.
 
-**Hire facts are immutable.** `name_at_hire`, `hire_datetime`, `hire_department_id`,
-`hire_job_id` are set on first load and never change. A re-upload with a different
-`hire_datetime` for an existing employee is ignored (first load wins). Attribute history is
-tracked only in `employee_versions`.
+**Hire facts are immutable; current state is not.** `name_at_hire`, `hire_datetime`,
+`hire_department_id`, `hire_job_id` are set on first load and never change afterward — a
+re-upload with a different `hire_datetime` for an existing employee is ignored (first load
+wins). `name`, `department_id`, `job_id` on `employees` track the employee's *current* state
+and are updated on every SCD version change; `employee_versions` retains the full history of
+every state the employee has ever had, with exactly one row (`is_current = true`) per employee
+at any time. See docs/DECISIONS.md for why `employees` was revised to carry current state
+(it previously held only the hire fact, with current status reachable only via a join).
 
-**Reports use hire facts**, not versions: they read `employees` (each employee counted once,
-attributed to `hire_department_id` / `hire_job_id`). `employee_versions` exists for analytics
-traceability.
+**Reports use hire facts, not current state or versions:** they read `employees` (each
+employee counted once, attributed to `hire_department_id` / `hire_job_id` — the department/job
+the person was hired into, unaffected by later transfers). `employee_versions`, and now
+`employees.name`/`department_id`/`job_id`, answer "what is this employee's status right now,"
+a different question from "where were they hired."
 
 ## Reference-table ingestion
 

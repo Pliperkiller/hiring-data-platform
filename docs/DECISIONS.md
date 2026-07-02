@@ -172,6 +172,29 @@ data; a few were product decisions from requirements.
 - **Re-upload semantics.** Same employee with identical attributes = no-op; with changed
   attributes = new version; only structurally broken rows are rejected. (This supersedes an
   earlier "duplicate = reject" idea.)
+- **`employees` now tracks current state (`name`/`department_id`/`job_id`), not only the hire
+  fact — this reverses part of the original design.** Through Phase 7, `employees` held only
+  the immutable hire fact (`name_at_hire`/`hire_department_id`/`hire_job_id`); reading an
+  employee's *current* department/job required a join to `employee_versions WHERE
+  is_current`. Manual validation of the SCD2 flow (uploading a changed-job re-hire row and
+  inspecting both tables) surfaced this as a real usability problem, not a deliberate
+  trade-off worth keeping: the whole point of carrying an `employees` table alongside
+  `employee_versions` is to have a fast, no-join answer for "what is this employee's status
+  right now," and the original design didn't provide one. Changed by this end (Phase 8):
+  - `employees` gained `name`, `department_id`, `job_id` columns, initialized equal to the
+    hire fact when an employee is first created, then kept in sync with the current
+    `employee_versions` row on every SCD transition (`IngestBatch._persist_hire` calls
+    `EmployeeRepository.update_current()` right after opening the new version).
+  - `name_at_hire`/`hire_datetime`/`hire_department_id`/`hire_job_id` are **unchanged and
+    still immutable** — this is additive, not a replacement. The two report materialized
+    views still join on `employees.hire_department_id`/`hire_job_id`, so hire-time
+    attribution and the already-verified report numbers (933 combinations, sum 1643, 7
+    departments above 137) are unaffected by this change.
+  - Migration `0003_employees_current_state` backfills existing rows (`name = name_at_hire`,
+    `department_id = hire_department_id`, `job_id = hire_job_id` — correct, since at first
+    load current equals hire) before adding the `NOT NULL` constraint.
+  - AVRO backup/restore, the domain `Employee` entity, and all repositories/tests were
+    updated to carry the three new fields end to end.
 
 ## Reports
 

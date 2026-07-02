@@ -3,6 +3,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.domain.rejected_record import Load, RejectedRecord
+from app.domain.value_objects import ReasonCode
 from app.infrastructure.db.repositories import (
     SqlAlchemyLoadRepository,
     SqlAlchemyRejectedRecordRepository,
@@ -19,7 +20,7 @@ def test_add_round_trips_raw_payload(db_session: Session) -> None:
         RejectedRecord(
             target_table="hired_employees",
             raw_payload=payload,
-            reason_code="MISSING_ID",
+            reason_code=ReasonCode.MISSING_ID,
             message="id is empty",
             field="id",
         )
@@ -37,7 +38,7 @@ def test_add_with_load_id_none_succeeds(db_session: Session) -> None:
         RejectedRecord(
             target_table="departments",
             raw_payload={},
-            reason_code="MISSING_NAME",
+            reason_code=ReasonCode.MISSING_NAME,
             message="name is empty",
         )
     )
@@ -54,7 +55,7 @@ def test_add_with_valid_load_id_and_list_for_load(db_session: Session) -> None:
         RejectedRecord(
             target_table="hired_employees",
             raw_payload={"id": "1"},
-            reason_code="MISSING_NAME",
+            reason_code=ReasonCode.MISSING_NAME,
             message="name is empty",
             load_id=load.id,
         )
@@ -73,7 +74,7 @@ def test_add_with_unknown_load_id_raises_integrity_error(db_session: Session) ->
             RejectedRecord(
                 target_table="hired_employees",
                 raw_payload={},
-                reason_code="MISSING_NAME",
+                reason_code=ReasonCode.MISSING_NAME,
                 message="name is empty",
                 load_id=999,
             )

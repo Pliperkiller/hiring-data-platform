@@ -23,6 +23,7 @@ from app.domain.repositories import (
     LoadRepository,
     RejectedRecordRepository,
 )
+from app.domain.value_objects import ReasonCode
 from app.infrastructure.db.models import (
     DepartmentModel,
     EmployeeModel,
@@ -252,7 +253,7 @@ class SqlAlchemyRejectedRecordRepository(RejectedRecordRepository):
             target_table=model.target_table,
             raw_payload=model.raw_payload,
             field=model.field,
-            reason_code=model.reason_code,
+            reason_code=ReasonCode(model.reason_code),
             message=model.message,
             load_id=model.load_id,
             created_at=model.created_at,

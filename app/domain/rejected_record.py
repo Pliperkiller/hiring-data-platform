@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from app.domain.value_objects import ReasonCode
+
 
 @dataclass(frozen=True, slots=True)
 class Load:
@@ -26,9 +28,7 @@ class Load:
 class RejectedRecord:
     target_table: str
     raw_payload: dict[str, Any]
-    # reason_code is a plain str in this phase; feature/validation narrows it to the
-    # ReasonCode catalog in app/domain/value_objects.py.
-    reason_code: str
+    reason_code: ReasonCode
     message: str
     field: str | None = None
     load_id: int | None = None

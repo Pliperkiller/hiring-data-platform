@@ -6,6 +6,7 @@ later phases) owns the transaction boundary.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 from sqlalchemy import select, text
@@ -63,6 +64,10 @@ class SqlAlchemyDepartmentRepository(DepartmentRepository):
     def exists(self, department_id: int) -> bool:
         return self._session.get(DepartmentModel, department_id) is not None
 
+    def truncate(self) -> None:
+        self._session.execute(text("TRUNCATE TABLE departments CASCADE"))
+        self._session.flush()
+
 
 class SqlAlchemyJobRepository(JobRepository):
     def __init__(self, session: Session) -> None:
@@ -88,6 +93,10 @@ class SqlAlchemyJobRepository(JobRepository):
 
     def exists(self, job_id: int) -> bool:
         return self._session.get(JobModel, job_id) is not None
+
+    def truncate(self) -> None:
+        self._session.execute(text("TRUNCATE TABLE jobs CASCADE"))
+        self._session.flush()
 
 
 class SqlAlchemyEmployeeRepository(EmployeeRepository):
@@ -116,6 +125,10 @@ class SqlAlchemyEmployeeRepository(EmployeeRepository):
     def list_all(self) -> list[Employee]:
         rows = self._session.scalars(select(EmployeeModel).order_by(EmployeeModel.employee_id))
         return [self._to_domain(r) for r in rows]
+
+    def truncate(self) -> None:
+        self._session.execute(text("TRUNCATE TABLE employees CASCADE"))
+        self._session.flush()
 
     @staticmethod
     def _to_domain(model: EmployeeModel) -> Employee:
@@ -176,6 +189,50 @@ class SqlAlchemyEmployeeVersionRepository(EmployeeVersionRepository):
             current.valid_to = valid_to
             self._session.flush()
 
+    def list_all(self) -> list[EmployeeVersion]:
+        rows = self._session.scalars(
+            select(EmployeeVersionModel).order_by(EmployeeVersionModel.version_id)
+        )
+        return [self._to_domain(r) for r in rows]
+
+    def truncate(self) -> None:
+        self._session.execute(text("TRUNCATE TABLE employee_versions CASCADE"))
+        self._session.flush()
+
+    def restore_all(self, versions: list[EmployeeVersion]) -> None:
+        if not versions:
+            return
+        self._session.execute(
+            text(
+                "INSERT INTO employee_versions "
+                "(version_id, employee_id, name, department_id, job_id, valid_from, "
+                "valid_to, is_current) "
+                "OVERRIDING SYSTEM VALUE "
+                "VALUES (:version_id, :employee_id, :name, :department_id, :job_id, "
+                ":valid_from, :valid_to, :is_current)"
+            ),
+            [
+                {
+                    "version_id": v.version_id,
+                    "employee_id": v.employee_id,
+                    "name": v.name,
+                    "department_id": v.department_id,
+                    "job_id": v.job_id,
+                    "valid_from": v.valid_from,
+                    "valid_to": v.valid_to,
+                    "is_current": v.is_current,
+                }
+                for v in versions
+            ],
+        )
+        self._session.execute(
+            text(
+                "SELECT setval(pg_get_serial_sequence('employee_versions', 'version_id'), "
+                "COALESCE((SELECT MAX(version_id) FROM employee_versions), 0) + 1, false)"
+            )
+        )
+        self._session.flush()
+
     @staticmethod
     def _to_domain(model: EmployeeVersionModel) -> EmployeeVersion:
         return EmployeeVersion(
@@ -215,6 +272,43 @@ class SqlAlchemyLoadRepository(LoadRepository):
         self._session.refresh(model)
         return self._to_domain(model)
 
+    def list_all(self) -> list[Load]:
+        rows = self._session.scalars(select(LoadModel).order_by(LoadModel.id))
+        return [self._to_domain(r) for r in rows]
+
+    def truncate(self) -> None:
+        self._session.execute(text("TRUNCATE TABLE loads CASCADE"))
+        self._session.flush()
+
+    def restore_all(self, loads: list[Load]) -> None:
+        if not loads:
+            return
+        self._session.execute(
+            text(
+                "INSERT INTO loads (id, source, started_at, finished_at, accepted, rejected) "
+                "OVERRIDING SYSTEM VALUE "
+                "VALUES (:id, :source, :started_at, :finished_at, :accepted, :rejected)"
+            ),
+            [
+                {
+                    "id": load.id,
+                    "source": load.source,
+                    "started_at": load.started_at,
+                    "finished_at": load.finished_at,
+                    "accepted": load.accepted,
+                    "rejected": load.rejected,
+                }
+                for load in loads
+            ],
+        )
+        self._session.execute(
+            text(
+                "SELECT setval(pg_get_serial_sequence('loads', 'id'), "
+                "COALESCE((SELECT MAX(id) FROM loads), 0) + 1, false)"
+            )
+        )
+        self._session.flush()
+
     @staticmethod
     def _to_domain(model: LoadModel) -> Load:
         return Load(
@@ -249,6 +343,48 @@ class SqlAlchemyRejectedRecordRepository(RejectedRecordRepository):
             select(RejectedRecordModel).where(RejectedRecordModel.load_id == load_id)
         )
         return [self._to_domain(r) for r in rows]
+
+    def list_all(self) -> list[RejectedRecord]:
+        rows = self._session.scalars(select(RejectedRecordModel).order_by(RejectedRecordModel.id))
+        return [self._to_domain(r) for r in rows]
+
+    def truncate(self) -> None:
+        self._session.execute(text("TRUNCATE TABLE rejected_records CASCADE"))
+        self._session.flush()
+
+    def restore_all(self, records: list[RejectedRecord]) -> None:
+        if not records:
+            return
+        self._session.execute(
+            text(
+                "INSERT INTO rejected_records "
+                "(id, target_table, raw_payload, field, reason_code, message, load_id, "
+                "created_at) "
+                "OVERRIDING SYSTEM VALUE "
+                "VALUES (:id, :target_table, :raw_payload, :field, :reason_code, :message, "
+                ":load_id, :created_at)"
+            ),
+            [
+                {
+                    "id": r.id,
+                    "target_table": r.target_table,
+                    "raw_payload": json.dumps(r.raw_payload),
+                    "field": r.field,
+                    "reason_code": r.reason_code.value,
+                    "message": r.message,
+                    "load_id": r.load_id,
+                    "created_at": r.created_at,
+                }
+                for r in records
+            ],
+        )
+        self._session.execute(
+            text(
+                "SELECT setval(pg_get_serial_sequence('rejected_records', 'id'), "
+                "COALESCE((SELECT MAX(id) FROM rejected_records), 0) + 1, false)"
+            )
+        )
+        self._session.flush()
 
     @staticmethod
     def _to_domain(model: RejectedRecordModel) -> RejectedRecord:

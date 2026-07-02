@@ -19,12 +19,18 @@ import streamlit as st
 
 from app.interface.ingest_constants import MAX_BATCH_SIZE
 from app.interface.ui.backup_restore import (
+    RESET_CONFIRMATION_TEXT,
     TABLE_NAMES,
     BackupOutcome,
+    ResetOutcome,
     RestoreOutcome,
     backup_endpoint,
     interpret_backup_result,
+    interpret_reset_result,
     interpret_restore_result,
+    is_authenticated,
+    is_reset_confirmed,
+    reset_endpoint,
     restore_endpoint,
 )
 from app.interface.ui.historical_load import (
@@ -86,10 +92,10 @@ def render_historical_load() -> None:
     )
 
     uploads: dict[TableName, Any] = {
-        "departments": st.file_uploader("departments.csv", type="csv", key="departments"),
-        "jobs": st.file_uploader("jobs.csv", type="csv", key="jobs"),
+        "departments": st.file_uploader("Departments", type="csv", key="departments"),
+        "jobs": st.file_uploader("Jobs", type="csv", key="jobs"),
         "hired_employees": st.file_uploader(
-            "hired_employees.csv", type="csv", key="hired_employees"
+            "Hired employees", type="csv", key="hired_employees"
         ),
     }
 
@@ -185,11 +191,12 @@ def _render_summary(summary: LoadSummary) -> None:
             [
                 {
                     "table": r.table,
-                    "batch_index": r.batch_index,
+                    "file_row": r.file_row,
                     "row_index": r.row_index,
                     "field": r.field,
                     "reason_code": r.reason_code,
                     "message": r.message,
+                    "raw_payload": r.raw_payload,
                 }
                 for r in filtered
             ]
@@ -211,14 +218,33 @@ def _build_admin_post_fn(client: httpx.Client) -> Any:
     return post_fn
 
 
-def render_backup_restore() -> None:
-    st.title("Backup & Restore")
+def render_admin() -> None:
+    """Password-gated Admin tab: backup/restore per table, plus a full database reset.
+
+    Streamlit re-runs this whole function on every rerun regardless of which tab is visually
+    active, so the auth check below must be a real early return — never a visual/CSS-only hide
+    — or any button click elsewhere on the page would render this tab's controls too.
+    """
+    admin_password = os.environ.get("ADMIN_PASSWORD", "")
+
+    if not st.session_state.get("admin_authenticated", False):
+        st.title("Admin")
+        entered_password = st.text_input("Password", type="password", key="admin_password_input")
+        if st.button("Log in", key="admin_login"):
+            if is_authenticated(entered_password, admin_password):
+                st.session_state["admin_authenticated"] = True
+                st.rerun()
+            else:
+                st.error("Incorrect password.")
+        return
+
+    st.title("Admin")
     st.caption(
         f"Backs up or restores one table at a time via {API_BASE_URL}/admin/*. Restore is a "
         "full replace (truncate + insert) and cannot be undone. These endpoints have no "
-        "authentication of their own — see docs/DECISIONS.md — so this page's confirmation "
-        "checkbox is a UI-level safeguard, not a substitute for restricting /admin/* at the "
-        "network level in a real deployment."
+        "authentication of their own — see docs/DECISIONS.md — so this page's password gate "
+        "and confirmation controls are UI-level safeguards, not a substitute for restricting "
+        "/admin/* at the network level in a real deployment."
     )
 
     with httpx.Client(base_url=API_BASE_URL, timeout=30.0) as client:
@@ -266,9 +292,34 @@ def render_backup_restore() -> None:
                     else:
                         st.error(restore_outcome.error_message)
 
+        st.divider()
+        st.subheader("Reset database")
+        st.warning(
+            "This is the single most destructive action in the app: it truncates all six "
+            "tables and refreshes the report views. It does NOT touch data/*.avro — existing "
+            "backups are unaffected."
+        )
+        reset_entered = st.text_input(
+            f'Type "{RESET_CONFIRMATION_TEXT}" to confirm', key="reset_confirmation_input"
+        )
+        if st.button(
+            "Reset database",
+            key="reset_database",
+            disabled=not is_reset_confirmed(reset_entered),
+        ):
+            result = post_fn(reset_endpoint())
+            st.session_state["reset_outcome"] = interpret_reset_result(result)
 
-tab_historical_load, tab_backup_restore = st.tabs(["Historical Load", "Backup & Restore"])
+        reset_outcome: ResetOutcome | None = st.session_state.get("reset_outcome")
+        if reset_outcome is not None:
+            if reset_outcome.success:
+                st.success("Database reset.")
+            else:
+                st.error(reset_outcome.error_message)
+
+
+tab_historical_load, tab_admin = st.tabs(["Historical Load", "Admin"])
 with tab_historical_load:
     render_historical_load()
-with tab_backup_restore:
-    render_backup_restore()
+with tab_admin:
+    render_admin()

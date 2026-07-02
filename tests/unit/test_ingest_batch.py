@@ -35,6 +35,9 @@ class FakeDepartmentRepository(DepartmentRepository):
     def exists(self, department_id: int) -> bool:
         return department_id in self._by_id
 
+    def truncate(self) -> None:
+        self._by_id.clear()
+
 
 class FakeJobRepository(JobRepository):
     def __init__(self, existing: dict[int, Job] | None = None) -> None:
@@ -52,6 +55,9 @@ class FakeJobRepository(JobRepository):
 
     def exists(self, job_id: int) -> bool:
         return job_id in self._by_id
+
+    def truncate(self) -> None:
+        self._by_id.clear()
 
 
 class FakeEmployeeRepository(EmployeeRepository):
@@ -72,6 +78,9 @@ class FakeEmployeeRepository(EmployeeRepository):
 
     def list_all(self) -> list[Employee]:
         return list(self._by_id.values())
+
+    def truncate(self) -> None:
+        self._by_id.clear()
 
 
 class FakeEmployeeVersionRepository(EmployeeVersionRepository):
@@ -102,6 +111,15 @@ class FakeEmployeeVersionRepository(EmployeeVersionRepository):
                 self._versions[index] = replace(version, is_current=False, valid_to=valid_to)
                 return
 
+    def list_all(self) -> list[EmployeeVersion]:
+        return list(self._versions)
+
+    def truncate(self) -> None:
+        self._versions.clear()
+
+    def restore_all(self, versions: list[EmployeeVersion]) -> None:
+        self._versions.extend(versions)
+
 
 class FakeLoadRepository(LoadRepository):
     def __init__(self) -> None:
@@ -125,6 +143,17 @@ class FakeLoadRepository(LoadRepository):
         self._loads[load_id] = updated
         return updated
 
+    def list_all(self) -> list[Load]:
+        return list(self._loads.values())
+
+    def truncate(self) -> None:
+        self._loads.clear()
+
+    def restore_all(self, loads: list[Load]) -> None:
+        for load in loads:
+            assert load.id is not None
+            self._loads[load.id] = load
+
 
 class FakeRejectedRecordRepository(RejectedRecordRepository):
     def __init__(self) -> None:
@@ -139,6 +168,15 @@ class FakeRejectedRecordRepository(RejectedRecordRepository):
 
     def list_for_load(self, load_id: int) -> list[RejectedRecord]:
         return [r for r in self._records if r.load_id == load_id]
+
+    def list_all(self) -> list[RejectedRecord]:
+        return list(self._records)
+
+    def truncate(self) -> None:
+        self._records.clear()
+
+    def restore_all(self, records: list[RejectedRecord]) -> None:
+        self._records.extend(records)
 
 
 class FakeReportRepository(ReportRepository):

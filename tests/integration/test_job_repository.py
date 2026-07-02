@@ -45,3 +45,13 @@ def test_exists(db_session: Session) -> None:
 
     assert repo.exists(1) is True
     assert repo.exists(2) is False
+
+
+def test_truncate_removes_all_rows(db_session: Session) -> None:
+    repo = SqlAlchemyJobRepository(db_session)
+    repo.upsert(Job(id=1, name="Recruiter"))
+    repo.upsert(Job(id=2, name="Engineer"))
+
+    repo.truncate()
+
+    assert repo.list_all() == []

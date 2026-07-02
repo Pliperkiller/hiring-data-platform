@@ -1,18 +1,19 @@
 """Restore use case: full replace of one table from data/<table>.avro.
 
-Admin operation (CLI: `python -m app.application.restore <table>`; also reachable via the
-`POST /admin/restore/{table}` endpoint used by the Streamlit "Backup & Restore" tab — see
-docs/DECISIONS.md for why that HTTP path exists despite restore being destructive). No
-re-validation — see docs/BACKUP_RESTORE.md ("a backup is trusted, already-clean data").
+Admin operation (also reachable via `POST /admin/restore/{table}` -- see docs/DECISIONS.md
+for why that HTTP path exists despite restore being destructive). No re-validation -- see
+docs/BACKUP_RESTORE.md ("a backup is trusted, already-clean data"). Wiring and CLI/HTTP
+entrypoints live in app/interface/ -- see app/interface/composition.py and
+app/interface/cli/restore.py.
 """
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 from sqlalchemy.orm import Session
 
+from app.domain.backup_codec import BackupCodec, validate_table_name
 from app.domain.repositories import (
     DepartmentRepository,
     EmployeeRepository,
@@ -21,8 +22,6 @@ from app.domain.repositories import (
     LoadRepository,
     RejectedRecordRepository,
 )
-from app.infrastructure.avro.codec import from_avro_dicts, read_avro
-from app.infrastructure.avro.tables import TABLE_NAMES, validate_table_name
 
 DEFAULT_DATA_DIR = Path("data")
 
@@ -37,6 +36,7 @@ class Restore:
         load_repo: LoadRepository,
         rejected_record_repo: RejectedRecordRepository,
         session: Session,
+        codec: BackupCodec,
         data_dir: Path = DEFAULT_DATA_DIR,
     ) -> None:
         self._department_repo = department_repo
@@ -46,12 +46,13 @@ class Restore:
         self._load_repo = load_repo
         self._rejected_record_repo = rejected_record_repo
         self._session = session
+        self._codec = codec
         self._data_dir = data_dir
 
     def run(self, table: str) -> int:
         validate_table_name(table)
         path = self._data_dir / f"{table}.avro"
-        rows = from_avro_dicts(table, read_avro(path))
+        rows = self._codec.read(table, path)
 
         if table == "departments":
             self._department_repo.truncate()
@@ -77,63 +78,6 @@ class Restore:
 
         self._session.commit()
         return len(rows)
-
-
-def _build_restore(session: Session, data_dir: Path = DEFAULT_DATA_DIR) -> Restore:
-    from app.infrastructure.db.repositories import (
-        SqlAlchemyDepartmentRepository,
-        SqlAlchemyEmployeeRepository,
-        SqlAlchemyEmployeeVersionRepository,
-        SqlAlchemyJobRepository,
-        SqlAlchemyLoadRepository,
-        SqlAlchemyRejectedRecordRepository,
-    )
-
-    return Restore(
-        department_repo=SqlAlchemyDepartmentRepository(session),
-        job_repo=SqlAlchemyJobRepository(session),
-        employee_repo=SqlAlchemyEmployeeRepository(session),
-        employee_version_repo=SqlAlchemyEmployeeVersionRepository(session),
-        load_repo=SqlAlchemyLoadRepository(session),
-        rejected_record_repo=SqlAlchemyRejectedRecordRepository(session),
-        session=session,
-        data_dir=data_dir,
-    )
-
-
-def main(argv: list[str]) -> int:
-    if len(argv) != 2:
-        print(
-            f"usage: python -m app.application.restore <table>\n"
-            f"  tables: {', '.join(TABLE_NAMES)}",
-            file=sys.stderr,
-        )
-        return 2
-    table = argv[1]
-    try:
-        validate_table_name(table)
-    except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
-
-    from app.infrastructure.config import get_settings
-    from app.infrastructure.db.session import build_engine, build_sessionmaker
-
-    engine = build_engine(get_settings().database_url)
-    session = build_sessionmaker(engine)()
-    try:
-        count = _build_restore(session).run(table)
-        print(f"restored {table}: {count} row(s)")
-        return 0
-    except Exception:
-        session.rollback()
-        raise
-    finally:
-        session.close()
-
-
-if __name__ == "__main__":
-    raise SystemExit(main(sys.argv))
 
 
 __all__ = ["Restore"]

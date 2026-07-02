@@ -1,17 +1,15 @@
 """Backup use case: export one table to data/<table>.avro.
 
-Admin CLI, never HTTP — see docs/API_CONTRACT.md and docs/BACKUP_RESTORE.md. Invoked as
-`python -m app.application.backup <table>`.
+Admin operation. Wiring (concrete repositories, codec) and CLI/HTTP entrypoints live in
+app/interface/ -- see app/interface/composition.py and app/interface/cli/backup.py.
 """
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy.orm import Session
-
+from app.domain.backup_codec import BackupCodec, validate_table_name
 from app.domain.repositories import (
     DepartmentRepository,
     EmployeeRepository,
@@ -20,8 +18,6 @@ from app.domain.repositories import (
     LoadRepository,
     RejectedRecordRepository,
 )
-from app.infrastructure.avro.codec import to_avro_dicts, write_avro
-from app.infrastructure.avro.tables import TABLE_NAMES, validate_table_name
 
 DEFAULT_DATA_DIR = Path("data")
 
@@ -35,6 +31,7 @@ class Backup:
         employee_version_repo: EmployeeVersionRepository,
         load_repo: LoadRepository,
         rejected_record_repo: RejectedRecordRepository,
+        codec: BackupCodec,
         data_dir: Path = DEFAULT_DATA_DIR,
     ) -> None:
         self._department_repo = department_repo
@@ -43,6 +40,7 @@ class Backup:
         self._employee_version_repo = employee_version_repo
         self._load_repo = load_repo
         self._rejected_record_repo = rejected_record_repo
+        self._codec = codec
         self._data_dir = data_dir
 
     def run(self, table: str) -> Path:
@@ -61,63 +59,9 @@ class Backup:
         else:
             rows = self._rejected_record_repo.list_all()
 
-        avro_rows = to_avro_dicts(table, rows)
         path = self._data_dir / f"{table}.avro"
-        write_avro(table, avro_rows, path)
+        self._codec.write(table, rows, path)
         return path
-
-
-def _build_backup(session: Session, data_dir: Path = DEFAULT_DATA_DIR) -> Backup:
-    from app.infrastructure.db.repositories import (
-        SqlAlchemyDepartmentRepository,
-        SqlAlchemyEmployeeRepository,
-        SqlAlchemyEmployeeVersionRepository,
-        SqlAlchemyJobRepository,
-        SqlAlchemyLoadRepository,
-        SqlAlchemyRejectedRecordRepository,
-    )
-
-    return Backup(
-        department_repo=SqlAlchemyDepartmentRepository(session),
-        job_repo=SqlAlchemyJobRepository(session),
-        employee_repo=SqlAlchemyEmployeeRepository(session),
-        employee_version_repo=SqlAlchemyEmployeeVersionRepository(session),
-        load_repo=SqlAlchemyLoadRepository(session),
-        rejected_record_repo=SqlAlchemyRejectedRecordRepository(session),
-        data_dir=data_dir,
-    )
-
-
-def main(argv: list[str]) -> int:
-    if len(argv) != 2:
-        print(
-            f"usage: python -m app.application.backup <table>\n"
-            f"  tables: {', '.join(TABLE_NAMES)}",
-            file=sys.stderr,
-        )
-        return 2
-    table = argv[1]
-    try:
-        validate_table_name(table)
-    except ValueError as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        return 2
-
-    from app.infrastructure.config import get_settings
-    from app.infrastructure.db.session import build_engine, build_sessionmaker
-
-    engine = build_engine(get_settings().database_url)
-    session = build_sessionmaker(engine)()
-    try:
-        path = _build_backup(session).run(table)
-        print(f"backed up {table} -> {path}")
-        return 0
-    finally:
-        session.close()
-
-
-if __name__ == "__main__":
-    raise SystemExit(main(sys.argv))
 
 
 __all__ = ["Backup"]

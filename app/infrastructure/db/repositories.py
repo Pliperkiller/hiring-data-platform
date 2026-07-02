@@ -8,13 +8,14 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 
 from app.domain.employee import Employee, EmployeeVersion
 from app.domain.reference import Department, Job
 from app.domain.rejected_record import Load, RejectedRecord
+from app.domain.report import DepartmentAboveAverageRow, HireByQuarterRow
 from app.domain.repositories import (
     DepartmentRepository,
     EmployeeRepository,
@@ -22,6 +23,7 @@ from app.domain.repositories import (
     JobRepository,
     LoadRepository,
     RejectedRecordRepository,
+    ReportRepository,
 )
 from app.domain.value_objects import ReasonCode
 from app.infrastructure.db.models import (
@@ -31,6 +33,8 @@ from app.infrastructure.db.models import (
     JobModel,
     LoadModel,
     RejectedRecordModel,
+    ReportDepartmentAboveAverageModel,
+    ReportHiresByQuarterModel,
 )
 
 
@@ -258,3 +262,38 @@ class SqlAlchemyRejectedRecordRepository(RejectedRecordRepository):
             load_id=model.load_id,
             created_at=model.created_at,
         )
+
+
+class SqlAlchemyReportRepository(ReportRepository):
+    def __init__(self, session: Session) -> None:
+        self._session = session
+
+    def refresh_views(self) -> None:
+        self._session.execute(text("REFRESH MATERIALIZED VIEW report_hires_by_quarter"))
+        self._session.execute(
+            text("REFRESH MATERIALIZED VIEW report_departments_above_average")
+        )
+
+    def list_hires_by_quarter(self) -> list[HireByQuarterRow]:
+        rows = self._session.scalars(
+            select(ReportHiresByQuarterModel).order_by(
+                ReportHiresByQuarterModel.department, ReportHiresByQuarterModel.job
+            )
+        )
+        return [
+            HireByQuarterRow(
+                department=r.department, job=r.job, q1=r.Q1, q2=r.Q2, q3=r.Q3, q4=r.Q4
+            )
+            for r in rows
+        ]
+
+    def list_departments_above_average(self) -> list[DepartmentAboveAverageRow]:
+        rows = self._session.scalars(
+            select(ReportDepartmentAboveAverageModel).order_by(
+                ReportDepartmentAboveAverageModel.hired.desc()
+            )
+        )
+        return [
+            DepartmentAboveAverageRow(id=r.id, department=r.department, hired=r.hired)
+            for r in rows
+        ]

@@ -7,9 +7,12 @@ phase adds, plus call tracking so tests can assert truncate-before-insert orderi
 
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Any
+
 from app.domain.employee import Employee, EmployeeVersion
 from app.domain.reference import Department, Job
-from app.domain.rejected_record import Load, RejectedRecord
+from app.domain.rejected_record import Load, LoadStats, RejectedRecord
 from app.domain.repositories import (
     DepartmentRepository,
     EmployeeRepository,
@@ -17,6 +20,7 @@ from app.domain.repositories import (
     JobRepository,
     LoadRepository,
     RejectedRecordRepository,
+    ReportRepository,
 )
 
 
@@ -145,6 +149,20 @@ class FakeLoadRepository(LoadRepository):
     def list_all(self) -> list[Load]:
         return list(self._loads)
 
+    def recent_stats(self, since: datetime) -> LoadStats:
+        finished = [
+            load
+            for load in self._loads
+            if load.finished_at is not None
+            and load.started_at is not None
+            and load.started_at >= since
+        ]
+        return LoadStats.compute(
+            total_loads=len(finished),
+            total_accepted=sum(load.accepted for load in finished),
+            total_rejected=sum(load.rejected for load in finished),
+        )
+
     def truncate(self) -> None:
         self.truncate_called = True
         self._loads.clear()
@@ -177,6 +195,20 @@ class FakeRejectedRecordRepository(RejectedRecordRepository):
     def restore_all(self, records: list[RejectedRecord]) -> None:
         self.restore_all_calls.append(list(records))
         self._records.extend(records)
+
+
+class FakeReportRepository(ReportRepository):
+    def __init__(self) -> None:
+        self.refresh_calls = 0
+
+    def refresh_views(self) -> None:
+        self.refresh_calls += 1
+
+    def list_hires_by_quarter(self) -> list[Any]:
+        return []
+
+    def list_departments_above_average(self) -> list[Any]:
+        return []
 
 
 class FakeSession:

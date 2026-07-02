@@ -1,10 +1,11 @@
-"""API tests for POST /admin/backup/{table} and POST /admin/restore/{table}
+"""API tests for POST /admin/backup/{table}, POST /admin/restore/{table}, and POST /admin/reset
 (docs/API_CONTRACT.md).
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -13,8 +14,14 @@ from sqlalchemy.orm import Session
 
 import app.application.backup as backup_module
 import app.application.restore as restore_module
-from app.domain.reference import Department
-from app.infrastructure.db.repositories import SqlAlchemyDepartmentRepository
+from app.domain.employee import Employee
+from app.domain.reference import Department, Job
+from app.infrastructure.db.repositories import (
+    SqlAlchemyDepartmentRepository,
+    SqlAlchemyEmployeeRepository,
+    SqlAlchemyJobRepository,
+    SqlAlchemyReportRepository,
+)
 from app.interface.api.dependencies import get_db
 from app.interface.api.main import app
 
@@ -69,3 +76,32 @@ def test_restore_missing_backup_file_returns_404(client: TestClient) -> None:
 
     assert response.status_code == 404
     assert response.json()["error"]["code"] == "BACKUP_NOT_FOUND"
+
+
+def test_reset_empties_all_tables_and_refreshes_report_views(
+    client: TestClient, db_session: Session
+) -> None:
+    SqlAlchemyDepartmentRepository(db_session).upsert(Department(id=1, name="Engineering"))
+    SqlAlchemyJobRepository(db_session).upsert(Job(id=5, name="Recruiter"))
+    SqlAlchemyEmployeeRepository(db_session).add(
+        Employee(
+            employee_id=101,
+            name_at_hire="Ada Lovelace",
+            hire_datetime=datetime(2021, 2, 10, 9, 30, tzinfo=UTC),
+            hire_department_id=1,
+            hire_job_id=5,
+        )
+    )
+    db_session.commit()
+    report_repo = SqlAlchemyReportRepository(db_session)
+    report_repo.refresh_views()
+
+    response = client.post("/admin/reset")
+
+    assert response.status_code == 200
+    assert response.json() == {"reset": True}
+    assert SqlAlchemyDepartmentRepository(db_session).list_all() == []
+    assert SqlAlchemyJobRepository(db_session).list_all() == []
+    assert SqlAlchemyEmployeeRepository(db_session).list_all() == []
+    assert report_repo.list_hires_by_quarter() == []
+    assert report_repo.list_departments_above_average() == []

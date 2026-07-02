@@ -183,6 +183,29 @@ data; a few were product decisions from requirements.
   this equals the average over all departments.
 - **Quarter bucketing in UTC.** Set the database timezone to UTC so `EXTRACT(QUARTER ...)` is
   deterministic across environments.
+- **Refresh lives behind a new `ReportRepository`, injected into `IngestBatch`.** A domain
+  `ReportRepository` interface exposes `refresh_views()` alongside the two read methods, and is
+  injected into `IngestBatch` the same way the other six repositories are (a 7th constructor
+  param). This keeps the use case free of SQLAlchemy imports and mirrors the existing
+  constructor-injection pattern, instead of reaching into
+  `app/infrastructure/db/repositories.py` from the application layer.
+- **`REFRESH MATERIALIZED VIEW`, not `CONCURRENTLY`.** `CONCURRENTLY` requires a unique index on
+  the view and only pays off when readers must never block during a long refresh; this
+  project's data volume and single-droplet beta deployment don't need it. A brief read-lock on
+  the view during refresh is an acceptable trade-off here.
+- **Refresh commits separately from the batch, after it, and never fails the batch.** In
+  `IngestBatch._run_batch`, the batch's own commit happens first; refresh then runs in a
+  `try/except` that commits again on success or rolls back and logs a warning on failure —
+  never re-raising. Running refresh inside the batch's own transaction was rejected: a refresh
+  failure would abort that whole Postgres transaction and roll back already-valid accepted
+  rows, letting an unrelated reporting concern compromise the CLAUDE.md-mandated ingestion
+  guarantees. A stale report is recoverable; lost ingestion data is not.
+- **Report rows are frozen dataclasses (`HireByQuarterRow`, `DepartmentAboveAverageRow`), not
+  dicts.** Matches the Phase 1-4 convention of typed domain entities everywhere; costs nothing
+  extra since the fields map 1:1 to the view columns.
+- **Materialized views remain excluded from backup/restore.** Confirmed against
+  `docs/BACKUP_RESTORE.md`'s six-table list: the two report views are derived data, rebuilt by
+  `REFRESH` from the six backed-up tables, so backing them up independently would be redundant.
 
 Verified numbers against the source data: report 1 yields 933 combinations, quarter columns
 summing to 1643 (total valid 2021 hires); report 2 yields 7 departments above the average of

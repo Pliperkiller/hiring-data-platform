@@ -90,7 +90,6 @@ app/
     repositories.py     # repository interfaces (ABCs)
   application/        # use cases orchestrating domain + repos
     ingest_batch.py
-    load_historical.py
     generate_report.py
     backup.py
     restore.py
@@ -103,13 +102,15 @@ app/
     avro/               # backup / restore in AVRO
     config.py
   interface/
+    ingest_constants.py  # MAX_BATCH_SIZE shared by api/schemas.py and ui/historical_load.py
     api/
       main.py           # FastAPI app
       routers/          # ingest.py, reports.py
       schemas.py        # request / response (Pydantic)
       errors.py         # exception handlers
     ui/
-      streamlit_app.py  # historical load + dashboards
+      streamlit_app.py    # historical load UI (rendering only)
+      historical_load.py  # pure orchestration: chunk, POST in order, aggregate
 tests/
   conftest.py           # DB fixtures: migrated test DB, per-test transaction rollback
   unit/                 # domain and application (no DB)

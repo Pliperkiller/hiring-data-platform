@@ -108,6 +108,51 @@ data; a few were product decisions from requirements.
   "a batch with 0 or more than 1000 rows." Every other malformed-request 422 (wrong envelope
   shape, non-object array elements) stays the generic `code: "VALIDATION_ERROR"`.
 
+## Historical load UI (Phase 4)
+
+- **Three separate `st.file_uploader` widgets, not one multi-file uploader.** The CSVs are
+  headerless and carry no metadata identifying which table they belong to; explicit
+  per-table uploaders (labeled "departments.csv", "jobs.csv", "hired_employees.csv") are
+  simpler and more robust than filename-sniffing or column-count heuristics, and match how
+  the challenge ships three separate files.
+- **Rejected rows are disambiguated with `table` + `batch_index` + `row_index`.** The API's
+  `row_index` is only unique within one batch's response; running three tables across many
+  batches needs `table` (which table) and `batch_index` (0-based, per-table batch sequence
+  number) alongside it so the combined summary table never conflates row 0 of hires batch 2
+  with row 0 of departments batch 0.
+- **A failed batch (network error, unexpected status) is recorded and skipped, not fatal.**
+  `run_historical_load` continues with the next batch of the same table, and subsequent
+  tables, rather than aborting the whole run. A `departments`/`jobs` batch failure is
+  surfaced with an explicit UI warning, since it can cause a wave of
+  `UNKNOWN_DEPARTMENT`/`UNKNOWN_JOB` rejections in `hired_employees` that are a downstream
+  consequence, not a data problem in the hire rows themselves.
+- **Known limitation: the `ui` service's `depends_on: app` is start-order only, not a
+  readiness gate.** `app` has no healthcheck today, and adding a full healthcheck-gated
+  dependency is out of scope for this phase. If a user clicks "Run historical load" before
+  the API is actually accepting connections, `post_fn` turns the connection error into a
+  failed `BatchOutcome` (readable message in the failed-batches table) instead of hanging
+  or showing a raw traceback — the fix is simply to retry once the API is up.
+- **CSVs are decoded as ASCII, matching `docs/DATA_MODEL.md`'s documented encoding for the
+  real challenge files.** A decode failure (e.g. an unexpected non-ASCII upload) is caught
+  and shown as a clear per-file `st.error`, not an unhandled exception.
+- **`app/application/load_historical.py` was removed rather than implemented.** Option B
+  (the Streamlit HTTP client, decided above) means there is no backend use case for
+  historical load — the UI repeatedly calls the existing `IngestBatch`-backed endpoints
+  exactly as any other API client would. `docs/DESIGN.md`'s folder-layout tree is updated
+  to match.
+- **`MAX_BATCH_SIZE` lives in `app/interface/ingest_constants.py`**, a tiny constant-only
+  module sibling to both `api/` and `ui/` under `interface/`. `api/schemas.py` and
+  `ui/historical_load.py` both import it, so the 1000-row cap is defined once. It does not
+  live inside `api/schemas.py` itself because that would force the UI (a thin HTTP client)
+  to import Pydantic/FastAPI-coupled code just for an integer constant.
+- **`app/interface/ui/streamlit_app.py` is excluded from the coverage measurement**
+  (`[tool.coverage.run].omit` in `pyproject.toml`). All of its logic worth testing —
+  chunking, ordering, aggregation, CSV parsing, failure handling — lives in
+  `historical_load.py`, which is unit-tested near 100%. `streamlit_app.py` itself is thin
+  widget/session_state glue; testing it would mean driving Streamlit's rendering internals
+  for no correctness benefit, which is exactly the kind of coverage-inflation this project
+  avoids.
+
 ## History (SCD Type 2)
 
 - **SCD Type 2 for traceability.** Employee attribute changes are versioned, not overwritten,

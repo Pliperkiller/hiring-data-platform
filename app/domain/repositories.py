@@ -13,6 +13,7 @@ from datetime import datetime
 from app.domain.employee import Employee, EmployeeVersion
 from app.domain.reference import Department, Job
 from app.domain.rejected_record import Load, RejectedRecord
+from app.domain.report import DepartmentAboveAverageRow, HireByQuarterRow
 
 
 class DepartmentRepository(ABC):
@@ -88,3 +89,14 @@ class RejectedRecordRepository(ABC):
 
     @abstractmethod
     def list_for_load(self, load_id: int) -> list[RejectedRecord]: ...
+
+
+class ReportRepository(ABC):
+    @abstractmethod
+    def refresh_views(self) -> None: ...
+
+    @abstractmethod
+    def list_hires_by_quarter(self) -> list[HireByQuarterRow]: ...
+
+    @abstractmethod
+    def list_departments_above_average(self) -> list[DepartmentAboveAverageRow]: ...

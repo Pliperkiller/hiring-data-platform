@@ -1,9 +1,15 @@
-"""Employee aggregate: immutable hire facts, plus SCD Type 2 version history.
+"""Employee aggregate: immutable hire facts, plus current state and SCD Type 2 version history.
 
 Validation-rule ownership (required fields, ISO 8601 parsing, FK existence) belongs to
 feature/validation. SCD transition orchestration (deciding when to open/close a version)
 belongs to feature/ingestion-api: decide_scd_action() is the pure decision, applied by
 app/application/ingest_batch.py.
+
+Employee carries both the immutable hire fact (name_at_hire, hire_datetime,
+hire_department_id, hire_job_id — set once, never changed) and the current state (name,
+department_id, job_id — kept in sync with the current EmployeeVersion on every SCD
+transition). Reports attribute hires by the hire-time fields, never the current ones — see
+docs/DECISIONS.md.
 """
 
 from __future__ import annotations
@@ -37,13 +43,22 @@ class EmployeeVersion:
 
 @dataclass(frozen=True, slots=True)
 class Employee:
-    """Aggregate root: hire facts, immutable after first load."""
+    """Aggregate root: immutable hire facts plus current state.
+
+    name_at_hire/hire_datetime/hire_department_id/hire_job_id are set once, at first load, and
+    never change. name/department_id/job_id track the employee's current state — updated
+    alongside the current EmployeeVersion on every SCD transition (see IngestBatch._persist_hire),
+    so they always equal the current version's attributes, without a join.
+    """
 
     employee_id: int
     name_at_hire: str
     hire_datetime: datetime
     hire_department_id: int
     hire_job_id: int
+    name: str
+    department_id: int
+    job_id: int
     first_loaded_at: datetime | None = None
 
 

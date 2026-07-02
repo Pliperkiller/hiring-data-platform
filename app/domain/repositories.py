@@ -64,6 +64,11 @@ class EmployeeRepository(ABC):
     def list_all(self) -> list[Employee]: ...
 
     @abstractmethod
+    def update_current(self, employee_id: int, name: str, department_id: int, job_id: int) -> None:
+        """Sync the current name/department/job to a new SCD version's attributes."""
+        ...
+
+    @abstractmethod
     def truncate(self) -> None: ...
 
 

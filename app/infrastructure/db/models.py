@@ -113,3 +113,26 @@ class RejectedRecordModel(Base):
         Index("ix_rejected_records_reason_code", "reason_code"),
         Index("ix_rejected_records_load_id", "load_id"),
     )
+
+
+class ReportHiresByQuarterModel(Base):
+    """Read-only mapping onto the report_hires_by_quarter materialized view."""
+
+    __tablename__ = "report_hires_by_quarter"
+
+    department: Mapped[str] = mapped_column(primary_key=True)
+    job: Mapped[str] = mapped_column(primary_key=True)
+    Q1: Mapped[int] = mapped_column()
+    Q2: Mapped[int] = mapped_column()
+    Q3: Mapped[int] = mapped_column()
+    Q4: Mapped[int] = mapped_column()
+
+
+class ReportDepartmentAboveAverageModel(Base):
+    """Read-only mapping onto the report_departments_above_average materialized view."""
+
+    __tablename__ = "report_departments_above_average"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    department: Mapped[str] = mapped_column()
+    hired: Mapped[int] = mapped_column()

@@ -25,6 +25,28 @@ class Load:
 
 
 @dataclass(frozen=True, slots=True)
+class LoadStats:
+    """Aggregate over finished loads with started_at >= some `since` cutoff."""
+
+    total_loads: int
+    total_accepted: int
+    total_rejected: int
+    average_reject_rate: float
+
+    @staticmethod
+    def compute(total_loads: int, total_accepted: int, total_rejected: int) -> LoadStats:
+        total_rows = total_accepted + total_rejected
+        # No finished loads (or all-empty batches) in the window: 0.0, not a ZeroDivisionError.
+        reject_rate = total_rejected / total_rows if total_rows else 0.0
+        return LoadStats(
+            total_loads=total_loads,
+            total_accepted=total_accepted,
+            total_rejected=total_rejected,
+            average_reject_rate=reject_rate,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class RejectedRecord:
     target_table: str
     raw_payload: dict[str, Any]

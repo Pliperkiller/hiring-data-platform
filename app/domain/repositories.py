@@ -12,7 +12,7 @@ from datetime import datetime
 
 from app.domain.employee import Employee, EmployeeVersion
 from app.domain.reference import Department, Job
-from app.domain.rejected_record import Load, RejectedRecord
+from app.domain.rejected_record import Load, LoadStats, RejectedRecord
 from app.domain.report import DepartmentAboveAverageRow, HireByQuarterRow
 
 
@@ -102,6 +102,9 @@ class LoadRepository(ABC):
 
     @abstractmethod
     def list_all(self) -> list[Load]: ...
+
+    @abstractmethod
+    def recent_stats(self, since: datetime) -> LoadStats: ...
 
     @abstractmethod
     def truncate(self) -> None: ...

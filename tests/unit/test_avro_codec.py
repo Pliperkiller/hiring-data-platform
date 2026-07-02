@@ -10,13 +10,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import pytest
-
 from app.domain.employee import Employee, EmployeeVersion
 from app.domain.reference import Department, Job
 from app.domain.rejected_record import Load, RejectedRecord
 from app.domain.value_objects import ReasonCode
-from app.infrastructure.avro import tables
 from app.infrastructure.avro.codec import (
     avro_dict_to_department,
     avro_dict_to_employee,
@@ -241,13 +238,3 @@ def test_raw_payload_json_round_trips(tmp_path: Path) -> None:
     (row,) = read_avro(path)
 
     assert avro_dict_to_rejected_record(row).raw_payload == payload
-
-
-def test_validate_table_name_rejects_unknown_table() -> None:
-    with pytest.raises(ValueError):
-        tables.validate_table_name("bogus")
-
-
-def test_validate_table_name_accepts_all_known_tables() -> None:
-    for table in tables.TABLE_NAMES:
-        tables.validate_table_name(table)

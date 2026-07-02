@@ -14,6 +14,8 @@ from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.interface.ingest_constants import MAX_BATCH_SIZE, MIN_BATCH_SIZE
+
 
 class DepartmentIn(BaseModel):
     model_config = ConfigDict(extra="allow")
@@ -39,9 +41,11 @@ class HireIn(BaseModel):
     job_id: Any = None
 
 
-DepartmentBatch = Annotated[list[DepartmentIn], Field(min_length=1, max_length=1000)]
-JobBatch = Annotated[list[JobIn], Field(min_length=1, max_length=1000)]
-HireBatch = Annotated[list[HireIn], Field(min_length=1, max_length=1000)]
+DepartmentBatch = Annotated[
+    list[DepartmentIn], Field(min_length=MIN_BATCH_SIZE, max_length=MAX_BATCH_SIZE)
+]
+JobBatch = Annotated[list[JobIn], Field(min_length=MIN_BATCH_SIZE, max_length=MAX_BATCH_SIZE)]
+HireBatch = Annotated[list[HireIn], Field(min_length=MIN_BATCH_SIZE, max_length=MAX_BATCH_SIZE)]
 
 
 class RejectedRowOut(BaseModel):

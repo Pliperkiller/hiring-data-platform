@@ -2,12 +2,18 @@
 
 Owns the transaction boundary: repositories only flush(); this use case commits once at the
 end of a successful batch, and lets any unhandled exception propagate so the caller's session
-rolls back instead of leaving a batch's failure half-persisted. No materialized-view refresh
-here — that is Phase 5's job, once the views exist (see docs/DECISIONS.md).
+rolls back instead of leaving a batch's failure half-persisted.
+
+After that commit, the two report materialized views are refreshed in a second, separate
+commit (see docs/DECISIONS.md). A refresh failure is logged and swallowed, never re-raised: if
+it ran inside the batch's own transaction instead, a refresh error would abort that transaction
+and roll back already-valid accepted rows, letting an unrelated reporting concern compromise
+the ingestion guarantees CLAUDE.md mandates.
 """
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -24,9 +30,12 @@ from app.domain.repositories import (
     JobRepository,
     LoadRepository,
     RejectedRecordRepository,
+    ReportRepository,
 )
 from app.domain.validation import ValidationService
 from app.domain.value_objects import ValidatedHire, ValidationFailure
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +65,7 @@ class IngestBatch:
         employee_version_repo: EmployeeVersionRepository,
         load_repo: LoadRepository,
         rejected_record_repo: RejectedRecordRepository,
+        report_repo: ReportRepository,
         validation_service: ValidationService,
         session: Session,
     ) -> None:
@@ -65,6 +75,7 @@ class IngestBatch:
         self._employee_version_repo = employee_version_repo
         self._load_repo = load_repo
         self._rejected_record_repo = rejected_record_repo
+        self._report_repo = report_repo
         self._validation = validation_service
         self._session = session
 
@@ -140,6 +151,13 @@ class IngestBatch:
 
         self._load_repo.mark_finished(load.id, accepted=accepted, rejected=rejected)
         self._session.commit()
+
+        try:
+            self._report_repo.refresh_views()
+            self._session.commit()
+        except Exception:
+            self._session.rollback()
+            logger.warning("Materialized view refresh failed for load %s", load.id, exc_info=True)
 
         return IngestResult(
             load_id=load.id,

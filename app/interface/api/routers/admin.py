@@ -94,7 +94,7 @@ def _build_reset(session: Session) -> Reset:
     summary="Back up one table to AVRO",
     description=(
         "Writes `data/<table>.avro` from the current contents of `table`. Not reachable "
-        "externally in a hardened deployment — see the module note on `/admin/*` above."
+        "externally in a hardened deployment."
     ),
 )
 def backup_table(table: str, session: Session = Depends(get_db)) -> BackupOut | JSONResponse:
@@ -112,8 +112,7 @@ def backup_table(table: str, session: Session = Depends(get_db)) -> BackupOut | 
     description=(
         "Serves the existing `data/<table>.avro` file as a download; a read, not an action —"
         "it does not create or refresh the backup (use `POST /admin/backup/{table}` for that "
-        "first). Not reachable externally in a hardened deployment — see the module note on "
-        "`/admin/*` above."
+        "first). Not reachable externally in a hardened deployment."
     ),
     response_class=FileResponse,
     response_model=None,
@@ -136,7 +135,7 @@ def download_backup(table: str) -> FileResponse | JSONResponse:
     description=(
         "Truncates `table` and reloads it from `data/<table>.avro`. Destructive: this replaces "
         "the table's contents, it never merges. Not reachable externally in a hardened "
-        "deployment — see the module note on `/admin/*` above."
+        "deployment."
     ),
 )
 def restore_table(table: str, session: Session = Depends(get_db)) -> RestoreOut | JSONResponse:
@@ -158,8 +157,7 @@ def restore_table(table: str, session: Session = Depends(get_db)) -> RestoreOut 
     description=(
         "Truncates all six tables and refreshes both report views. The single most destructive "
         "operation in the app — it does not touch `data/*.avro`, so existing backups survive a "
-        "reset untouched. Not reachable externally in a hardened deployment — see the module "
-        "note on `/admin/*` above."
+        "reset untouched. Not reachable externally in a hardened deployment."
     ),
 )
 def reset_database(session: Session = Depends(get_db)) -> ResetOut:
